@@ -18,8 +18,8 @@ Built with **Angular 18** (standalone components, signals), **.NET 8** (minimal 
 | 5b. Offline editing | Boards open from a local copy without a connection; edits are kept on the device and sent when back online | ✅ Done |
 | 6a. Accounts | Email and password sign-in with a session cookie; boards belong to their creator | ✅ Done |
 | 6b. Sharing | Invite links for editors and viewers, view-only mode, managing who has access | ✅ Done |
-| 7. History | Version history and restore | ⏳ Next |
-| 8. AI | Turn a prompt into a diagram | Planned |
+| 7. History | Automatic and named versions, preview, restore (live for everyone, and undoable) | ✅ Done |
+| 8. AI | Turn a prompt into a diagram | ⏳ Next |
 | 9. Quality | End-to-end tests, load tests, deployment | Planned |
 
 ## Using the board

@@ -1,0 +1,98 @@
+.panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  overflow: auto;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -6px 0 20px rgb(0 0 0 / 0.06);
+  z-index: 5;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.close {
+  border: none;
+  background: none;
+  font-size: 1.3rem;
+}
+
+.save {
+  display: flex;
+  gap: 6px;
+}
+
+.save input {
+  flex: 1;
+  min-width: 0;
+}
+
+.thumb {
+  height: 160px;
+}
+
+.preview p {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.hint {
+  font-size: 0.8rem;
+}
+
+.versions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.versions button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid transparent;
+  background: none;
+  text-align: left;
+}
+
+.versions button:hover,
+.versions button.current {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.auto {
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.error {
+  color: var(--danger);
+}

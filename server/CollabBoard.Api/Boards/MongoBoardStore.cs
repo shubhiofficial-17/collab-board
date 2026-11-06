@@ -260,6 +260,7 @@ public sealed class MongoIndexInitializer(IMongoDatabase database) : IHostedServ
     {
         await MongoBoardStore.EnsureIndexesAsync(database, cancellationToken);
         await Accounts.MongoUserStore.EnsureIndexesAsync(database, cancellationToken);
+        await History.MongoVersionStore.EnsureIndexesAsync(database, cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

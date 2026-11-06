@@ -35,6 +35,9 @@
       @if (!canEdit()) {
         <span class="badge" title="You can look, but not change this board.">View only</span>
       }
+      @if (!fromCache()) {
+        <button type="button" class="history" [attr.aria-pressed]="historyOpen()" (click)="historyOpen.set(!historyOpen())">History</button>
+      }
       @if (role() === 'owner' && !fromCache()) {
         <button type="button" class="share" (click)="sharingOpen.set(true)">Share</button>
       }
@@ -60,6 +63,9 @@
         <app-board-canvas [remoteCursors]="realtime.cursors()" (cursorMoved)="onCursorMoved($event)" />
         @if (canEdit()) {
           <app-toolbar class="floating-toolbar" />
+        }
+        @if (historyOpen() && board(); as current) {
+          <app-history-panel [boardId]="current.id" [canEdit]="canEdit()" (closed)="historyOpen.set(false)" (restored)="resync()" />
         }
       }
     </section>

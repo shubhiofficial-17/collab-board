@@ -68,6 +68,7 @@ public static class BoardEndpoints
             ClaimsPrincipal user,
             IBoardStore store,
             BoardChanges changes,
+            History.BoardHistory history,
             CancellationToken ct) =>
         {
             if (await RequireRole(id, BoardRoles.Editor, user, store, ct) is { } denied)
@@ -77,7 +78,13 @@ public static class BoardEndpoints
 
             try
             {
-                return await changes.ApplyAsync(id, request.Ops, connectionId, ct) is { } result ? Results.Ok(result) : Results.NotFound();
+                if (await changes.ApplyAsync(id, request.Ops, connectionId, ct) is not { } result)
+                {
+                    return Results.NotFound();
+                }
+
+                await history.AfterChangeAsync(id, ct);
+                return Results.Ok(result);
             }
             catch (BoardOpException ex)
             {

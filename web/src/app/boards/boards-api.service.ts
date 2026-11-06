@@ -2,7 +2,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { Op } from '../board/model/ops';
-import { Board, BoardContent, ShareLink, ShareRole, Sharing } from './board';
+import { Board, BoardContent, ShareLink, ShareRole, Sharing, VersionDetail, VersionSummary } from './board';
 
 @Injectable({ providedIn: 'root' })
 export class BoardsApi {
@@ -53,6 +53,22 @@ export class BoardsApi {
 
   acceptInvite(token: string): Observable<{ boardId: string; role: string }> {
     return this.http.post<{ boardId: string; role: string }>(`/api/invites/${encodeURIComponent(token)}/accept`, {});
+  }
+
+  versions(id: string): Observable<VersionSummary[]> {
+    return this.http.get<VersionSummary[]>(`${url(id)}/versions`);
+  }
+
+  version(id: string, versionId: string): Observable<VersionDetail> {
+    return this.http.get<VersionDetail>(`${url(id)}/versions/${encodeURIComponent(versionId)}`);
+  }
+
+  saveVersion(id: string, name: string): Observable<VersionSummary> {
+    return this.http.post<VersionSummary>(`${url(id)}/versions`, { name });
+  }
+
+  restoreVersion(id: string, versionId: string): Observable<{ version: number }> {
+    return this.http.post<{ version: number }>(`${url(id)}/versions/${encodeURIComponent(versionId)}/restore`, {});
   }
 
   /**

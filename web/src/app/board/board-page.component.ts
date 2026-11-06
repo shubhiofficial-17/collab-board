@@ -14,12 +14,13 @@ import { BoardSync } from './board-sync';
 import { BoardCanvasComponent } from './canvas/board-canvas.component';
 import { OfflineCache } from './offline-cache';
 import { ShareDialogComponent } from '../sharing/share-dialog.component';
+import { HistoryPanelComponent } from '../history/history-panel.component';
 import { ToolbarComponent } from './toolbar/toolbar.component';
 
 @Component({
   selector: 'app-board-page',
   standalone: true,
-  imports: [RouterLink, BoardCanvasComponent, ToolbarComponent, ShareDialogComponent],
+  imports: [RouterLink, BoardCanvasComponent, ToolbarComponent, ShareDialogComponent, HistoryPanelComponent],
   // One state, save queue and live connection per open board.
   providers: [BoardState, BoardSync, RealtimeService],
   templateUrl: './board-page.component.html',
@@ -44,6 +45,7 @@ export class BoardPageComponent implements OnInit {
   /** Opened from the local copy because the server couldn't be reached. */
   readonly fromCache = signal(false);
   readonly sharingOpen = signal(false);
+  readonly historyOpen = signal(false);
   /** This user's role. Unknown (e.g. no members listed) counts as editor; the server has the final say. */
   readonly role = computed<BoardRole>(() => {
     const me = this.auth.me();
@@ -128,8 +130,8 @@ export class BoardPageComponent implements OnInit {
     this.realtime.moveCursor(point.x, point.y);
   }
 
-  /** After a reconnect, changes may have been missed: reload the board, keeping unsaved local edits. */
-  private resync(): void {
+  /** After a reconnect (or a restore), changes may have been missed: reload the board, keeping unsaved local edits. */
+  resync(): void {
     const board = this.board();
     if (!board) {
       return;
