@@ -7,11 +7,41 @@
   <div class="layout">
     <header class="topbar">
       <a routerLink="/" class="back" aria-label="Back to boards">←</a>
-      <h1>{{ board()?.title ?? 'Loading…' }}</h1>
+      @if (renaming()) {
+        <input
+          #titleInput
+          class="title-input"
+          aria-label="Board name"
+          maxlength="120"
+          [value]="board()?.title ?? ''"
+          (blur)="rename(titleInput.value)"
+          (keydown)="onTitleKeydown($event)"
+        />
+      } @else {
+        <h1>
+          <button type="button" class="title" title="Rename board" [disabled]="!board()" (click)="renaming.set(true)">
+            {{ board()?.title ?? 'Loading…' }}
+          </button>
+        </h1>
+      }
+
+      <span class="save-status" [attr.data-status]="sync.status()" role="status">
+        @switch (sync.status()) {
+          @case ('saving') { Saving… }
+          @case ('offline') {
+            Offline: changes not saved yet
+            <button type="button" class="link" (click)="sync.retryNow()">Retry</button>
+          }
+          @case ('rejected') { Some changes couldn't be saved }
+          @default { @if (loaded()) { Saved } }
+        }
+      </span>
     </header>
     <section class="canvas-area">
-      <app-board-canvas />
-      <app-toolbar class="floating-toolbar" />
+      @if (loaded()) {
+        <app-board-canvas />
+        <app-toolbar class="floating-toolbar" />
+      }
     </section>
   </div>
 }

@@ -1,6 +1,11 @@
 services:
   server:
     build: ./server
+    environment:
+      ConnectionStrings__Mongo: "mongodb://mongo:27017/collab"
+    depends_on:
+      mongo:
+        condition: service_healthy
 
   web:
     build: ./web
@@ -8,3 +13,16 @@ services:
       - "8080:80"
     depends_on:
       - server
+
+  mongo:
+    image: mongo:7
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
