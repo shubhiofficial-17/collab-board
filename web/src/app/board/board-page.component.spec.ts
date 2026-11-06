@@ -99,7 +99,7 @@ describe('BoardPageComponent', () => {
 
     expect(fixture.nativeElement.querySelector('.avatar').textContent.trim()).toBe('BL');
 
-    hub.emit('OpsApplied', { ops: [{ type: 'delete', id: 's1' }], version: 4, from: 'conn-bob' });
+    hub.emit('OpsApplied', { ops: [{ type: 'delete', id: 's1', ts: '0000000000001:0000:bob' }], version: 4, from: 'conn-bob' });
     hub.emit('CursorMoved', { connectionId: 'conn-bob', x: 5, y: 5 });
     fixture.detectChanges();
 
