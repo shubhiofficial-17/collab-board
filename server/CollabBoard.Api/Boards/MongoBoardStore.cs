@@ -41,10 +41,10 @@ public sealed class MongoBoardStore(IMongoDatabase database, TimeProvider time, 
 
     public async Task<Board?> RenameAsync(string id, string title, CancellationToken ct)
     {
-        var doc = await _boards.FindOneAndUpdateAsync(
+        var doc = await _boards.FindOneAndUpdateAsync<BoardDocument, BoardDocument>(
             b => b.Id == id,
             Builders<BoardDocument>.Update.Set(b => b.Title, title).Set(b => b.UpdatedAt, time.GetUtcNow().UtcDateTime),
-            new FindOneAndUpdateOptions<BoardDocument>
+            new FindOneAndUpdateOptions<BoardDocument, BoardDocument>
             {
                 ReturnDocument = ReturnDocument.After,
                 Projection = Builders<BoardDocument>.Projection.Exclude(b => b.Shapes),
