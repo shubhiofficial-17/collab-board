@@ -15,12 +15,16 @@ import { BoardCanvasComponent } from './canvas/board-canvas.component';
 import { OfflineCache } from './offline-cache';
 import { ShareDialogComponent } from '../sharing/share-dialog.component';
 import { HistoryPanelComponent } from '../history/history-panel.component';
+import { AiPromptComponent } from '../ai/ai-prompt.component';
+import { Op } from './model/ops';
+import { Shape } from './model/shapes';
+import { screenToWorld } from './model/viewport';
 import { ToolbarComponent } from './toolbar/toolbar.component';
 
 @Component({
   selector: 'app-board-page',
   standalone: true,
-  imports: [RouterLink, BoardCanvasComponent, ToolbarComponent, ShareDialogComponent, HistoryPanelComponent],
+  imports: [RouterLink, BoardCanvasComponent, ToolbarComponent, ShareDialogComponent, HistoryPanelComponent, AiPromptComponent],
   // One state, save queue and live connection per open board.
   providers: [BoardState, BoardSync, RealtimeService],
   templateUrl: './board-page.component.html',
@@ -46,6 +50,10 @@ export class BoardPageComponent implements OnInit {
   readonly fromCache = signal(false);
   readonly sharingOpen = signal(false);
   readonly historyOpen = signal(false);
+  readonly aiEnabled = signal(false);
+  readonly aiOpen = signal(false);
+  /** The middle of the visible area, in board coordinates: where a generated diagram goes. */
+  readonly viewCenter = computed(() => screenToWorld(this.state.viewport(), { x: window.innerWidth / 2, y: window.innerHeight / 2 }));
   /** This user's role. Unknown (e.g. no members listed) counts as editor; the server has the final say. */
   readonly role = computed<BoardRole>(() => {
     const me = this.auth.me();
@@ -112,11 +120,21 @@ export class BoardPageComponent implements OnInit {
       .subscribe((unsaved) => this.cache.savePending(board.id, unsaved));
     this.sync.start(board.id, this.state.committed, () => this.realtime.connectionId, pending);
     this.loaded.set(true);
+    this.api.aiStatus().subscribe({ next: ({ enabled }) => this.aiEnabled.set(enabled), error: () => this.aiEnabled.set(false) });
     const identity = loadIdentity();
     void this.realtime.connect(board.id, { ...identity, name: this.auth.me()?.name ?? identity.name }, {
       onOps: (message) => this.state.applyRemote(message.ops),
       onResync: () => this.resync(),
     });
+  }
+
+  /** Adds a generated diagram as one change (so a single undo removes it), on top of everything. */
+  addGenerated(shapes: Shape[]): void {
+    this.aiOpen.set(false);
+    const base = this.state.nextZ();
+    this.state.apply(shapes.map((shape): Op => ({ type: 'add', shape: { ...shape, z: base + shape.z } })));
+    this.state.select(shapes.map((s) => s.id));
+    this.state.tool.set('select');
   }
 
   /** The browser is back online: send unsaved changes and reconnect. */

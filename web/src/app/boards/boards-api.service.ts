@@ -2,6 +2,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { Op } from '../board/model/ops';
+import { Shape } from '../board/model/shapes';
 import { Board, BoardContent, ShareLink, ShareRole, Sharing, VersionDetail, VersionSummary } from './board';
 
 @Injectable({ providedIn: 'root' })
@@ -69,6 +70,16 @@ export class BoardsApi {
 
   restoreVersion(id: string, versionId: string): Observable<{ version: number }> {
     return this.http.post<{ version: number }>(`${url(id)}/versions/${encodeURIComponent(versionId)}/restore`, {});
+  }
+
+  /** Whether this server has AI set up. */
+  aiStatus(): Observable<{ enabled: boolean }> {
+    return this.http.get<{ enabled: boolean }>('/api/ai/status');
+  }
+
+  /** Asks the AI for a diagram centred on (x, y). Returns shapes to add; nothing is saved yet. */
+  generateDiagram(id: string, prompt: string, x: number, y: number): Observable<{ shapes: Shape[] }> {
+    return this.http.post<{ shapes: Shape[] }>(`${url(id)}/ai/diagram`, { prompt, x, y });
   }
 
   /**

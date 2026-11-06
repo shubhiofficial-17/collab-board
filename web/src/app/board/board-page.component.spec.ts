@@ -49,7 +49,8 @@ describe('BoardPageComponent', () => {
   const state = () => fixture.debugElement.injector.get(BoardState);
 
   beforeEach(() => {
-    api = jasmine.createSpyObj<BoardsApi>('BoardsApi', ['get', 'applyOps', 'rename']);
+    api = jasmine.createSpyObj<BoardsApi>('BoardsApi', ['get', 'applyOps', 'rename', 'aiStatus']);
+    api.aiStatus.and.returnValue(of({ enabled: false }));
     api.applyOps.and.returnValue(of({ version: 4 }));
     hub = new FakeHubConnection();
     storage = new MemoryStorage();
@@ -183,6 +184,25 @@ describe('BoardPageComponent', () => {
 
     expect(fixture.nativeElement.querySelector('button.share')).not.toBeNull();
     expect(state().readOnly()).toBeFalse();
+  });
+
+  it('adds a generated diagram as one undoable change', () => {
+    api.aiStatus.and.returnValue(of({ enabled: true }));
+    api.get.and.returnValue(of(content));
+    setup();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button.ai')).not.toBeNull();
+
+    fixture.componentInstance.addGenerated([
+      { id: 'g1', kind: 'sticky', x: 0, y: 0, w: 180, h: 100, color: '#fde68a', z: 1, text: 'Start' },
+      { id: 'g2', kind: 'sticky', x: 0, y: 200, w: 180, h: 100, color: '#fde68a', z: 2, text: 'End' },
+    ]);
+
+    expect(state().shape('g1')!.z).toBeGreaterThan(content.shapes[0].z);
+    expect([...state().selection()]).toEqual(['g1', 'g2']);
+    state().undo();
+    expect(state().shape('g1')).toBeUndefined();
+    expect(state().shape('g2')).toBeUndefined();
   });
 
   function seedCache(pending: StampedOp[]) {
