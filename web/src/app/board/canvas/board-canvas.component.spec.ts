@@ -103,4 +103,20 @@ describe('BoardCanvasComponent', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(state.tool()).toBe('select');
   });
+
+  it('adds a sticky note and saves its text with Ctrl+Enter', () => {
+    state.tool.set('sticky');
+    pointer('pointerdown', 200, 200);
+
+    const editor: HTMLTextAreaElement = fixture.nativeElement.querySelector('textarea');
+    expect(editor).not.toBeNull();
+    editor.value = 'Ship it';
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+    fixture.detectChanges();
+
+    const [note] = state.ordered();
+    expect(note).toEqual(jasmine.objectContaining({ kind: 'sticky', text: 'Ship it' }));
+    expect(fixture.nativeElement.querySelector('textarea')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.sticky-text').textContent).toContain('Ship it');
+  });
 });

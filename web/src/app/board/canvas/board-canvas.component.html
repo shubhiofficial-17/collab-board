@@ -67,19 +67,21 @@
         [attr.stroke-width]="1.5 / state.viewport().zoom"
       />
     }
-
-    @if (editing(); as shape) {
-      <foreignObject [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.w" [attr.height]="shape.h">
-        <xhtml:textarea
-          #editor
-          class="sticky-editor"
-          aria-label="Sticky note text"
-          [value]="shape.text ?? ''"
-          (blur)="onEditorBlur($event)"
-          (keydown)="onEditorKeydown($event)"
-          (pointerdown)="$event.stopPropagation()"
-        ></xhtml:textarea>
-      </foreignObject>
-    }
   </g>
 </svg>
+
+@if (editorBox(); as box) {
+  <textarea
+    #editor
+    class="sticky-editor"
+    aria-label="Sticky note text"
+    [value]="box.text"
+    [style.left.px]="box.left"
+    [style.top.px]="box.top"
+    [style.width.px]="box.width"
+    [style.height.px]="box.height"
+    [style.font-size.px]="box.fontSize"
+    (blur)="onEditorBlur($event)"
+    (keydown)="onEditorKeydown($event)"
+  ></textarea>
+}

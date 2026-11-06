@@ -3,7 +3,7 @@ import { BoardState } from '../board-state';
 import { normalizePath, pathData, rectFromPoints } from '../model/geometry';
 import { Op } from '../model/ops';
 import { STICKY_SIZE, Shape, newId } from '../model/shapes';
-import { Point, Viewport, screenToWorld, zoomAt } from '../model/viewport';
+import { Point, Viewport, screenToWorld, worldToScreen, zoomAt } from '../model/viewport';
 
 /** What the current pointer drag is doing. */
 type Drag =
@@ -61,9 +61,27 @@ export class BoardCanvasComponent {
     return this.state.tool() === 'select' ? 'default' : 'crosshair';
   });
 
-  readonly editing = computed(() => {
+  /**
+   * Where the sticky-note editor sits, in screen pixels. The editor is a plain HTML textarea laid
+   * over the canvas rather than an element inside the SVG, so it behaves like any text field.
+   */
+  readonly editorBox = computed(() => {
     const id = this.state.editingId();
-    return id ? this.state.shapes().get(id) ?? null : null;
+    const shape = id ? this.state.shapes().get(id) : undefined;
+    if (!shape) {
+      return null;
+    }
+
+    const v = this.state.viewport();
+    const topLeft = worldToScreen(v, { x: shape.x, y: shape.y });
+    return {
+      text: shape.text ?? '',
+      left: topLeft.x,
+      top: topLeft.y,
+      width: shape.w * v.zoom,
+      height: shape.h * v.zoom,
+      fontSize: 15 * v.zoom,
+    };
   });
 
   pathD(shape: Shape): string {
