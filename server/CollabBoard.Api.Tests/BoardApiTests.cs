@@ -18,7 +18,7 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Created_board_can_be_fetched_and_is_listed()
     {
-        var client = factory.CreateClient();
+        var client = (await factory.SignUpAsync()).Client;
 
         var created = await client.PostAsJsonAsync("/api/boards", new { title = "  Sprint retro  " });
         var board = await created.Content.ReadFromJsonAsync<Board>();
@@ -39,7 +39,7 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Missing_title_gets_a_default()
     {
-        var created = await factory.CreateClient().PostAsJsonAsync("/api/boards", new { });
+        var created = await (await factory.SignUpAsync()).Client.PostAsJsonAsync("/api/boards", new { });
 
         Assert.Equal("Untitled board", (await created.Content.ReadFromJsonAsync<Board>())!.Title);
     }
@@ -47,7 +47,7 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Overlong_title_is_rejected()
     {
-        var response = await factory.CreateClient().PostAsJsonAsync("/api/boards", new { title = new string('x', 121) });
+        var response = await (await factory.SignUpAsync()).Client.PostAsJsonAsync("/api/boards", new { title = new string('x', 121) });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -55,7 +55,7 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Unknown_board_is_404()
     {
-        var response = await factory.CreateClient().GetAsync("/api/boards/doesnotexist");
+        var response = await (await factory.SignUpAsync()).Client.GetAsync("/api/boards/doesnotexist");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -72,7 +72,7 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Saved_operations_come_back_when_the_board_is_opened()
     {
-        var client = factory.CreateClient();
+        var client = (await factory.SignUpAsync()).Client;
         var board = (await (await client.PostAsJsonAsync("/api/boards", new { title = "Ops" })).Content.ReadFromJsonAsync<Board>())!;
 
         var save = await client.PostAsJsonAsync($"/api/boards/{board.Id}/ops", new
@@ -95,7 +95,7 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Invalid_operations_get_a_400_problem()
     {
-        var client = factory.CreateClient();
+        var client = (await factory.SignUpAsync()).Client;
         var board = (await (await client.PostAsJsonAsync("/api/boards", new { })).Content.ReadFromJsonAsync<Board>())!;
 
         var response = await client.PostAsJsonAsync($"/api/boards/{board.Id}/ops", new
@@ -110,7 +110,7 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Boards_can_be_renamed_and_deleted()
     {
-        var client = factory.CreateClient();
+        var client = (await factory.SignUpAsync()).Client;
         var board = (await (await client.PostAsJsonAsync("/api/boards", new { title = "Draft" })).Content.ReadFromJsonAsync<Board>())!;
 
         var renamed = await client.PatchAsJsonAsync($"/api/boards/{board.Id}", new { title = "Final" });
@@ -118,5 +118,20 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
 
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/boards/{board.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/boards/{board.Id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Other_peoples_boards_are_invisible()
+    {
+        var alice = await factory.SignUpAsync("Alice");
+        var bob = await factory.SignUpAsync("Bob");
+        var board = (await (await alice.Client.PostAsJsonAsync("/api/boards", new { title = "Private" })).Content.ReadFromJsonAsync<Board>())!;
+
+        Assert.Equal(BoardRoles.Owner, Assert.Single(board.Members).Role);
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.Client.GetAsync($"/api/boards/{board.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.Client.DeleteAsync($"/api/boards/{board.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await bob.Client.PostAsJsonAsync($"/api/boards/{board.Id}/ops", new { ops = Array.Empty<object>() })).StatusCode);
+        Assert.DoesNotContain(await bob.Client.GetFromJsonAsync<List<Board>>("/api/boards"))!, b => b.Id == board.Id);
     }
 }

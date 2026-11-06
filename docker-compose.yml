@@ -3,6 +3,9 @@ services:
     build: ./server
     environment:
       ConnectionStrings__Mongo: "mongodb://mongo:27017/collab"
+      DataProtection__KeysPath: /keys
+    volumes:
+      - auth-keys:/keys
     depends_on:
       mongo:
         condition: service_healthy
@@ -26,3 +29,4 @@ services:
 
 volumes:
   mongo-data:
+  auth-keys:

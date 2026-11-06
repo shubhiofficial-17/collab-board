@@ -14,10 +14,17 @@ public sealed class MongoBoardStore(IMongoDatabase database, TimeProvider time, 
 
     private readonly IMongoCollection<BoardDocument> _boards = database.GetCollection<BoardDocument>("boards");
 
-    public async Task<Board> CreateAsync(string title, CancellationToken ct)
+    public async Task<Board> CreateAsync(string title, string ownerId, CancellationToken ct)
     {
         var now = time.GetUtcNow().UtcDateTime;
-        var doc = new BoardDocument { Id = BoardIds.New(), Title = title, CreatedAt = now, UpdatedAt = now };
+        var doc = new BoardDocument
+        {
+            Id = BoardIds.New(),
+            Title = title,
+            CreatedAt = now,
+            UpdatedAt = now,
+            Members = [new BoardMember(ownerId, BoardRoles.Owner)],
+        };
         await _boards.InsertOneAsync(doc, cancellationToken: ct);
         return doc.ToBoard();
     }
@@ -28,10 +35,18 @@ public sealed class MongoBoardStore(IMongoDatabase database, TimeProvider time, 
         return doc?.ToContent();
     }
 
-    public async Task<IReadOnlyList<Board>> ListAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<BoardMember>?> GetMembersAsync(string id, CancellationToken ct)
+    {
+        var doc = await _boards.Find(b => b.Id == id)
+            .Project<BoardDocument>(Builders<BoardDocument>.Projection.Exclude(b => b.Shapes))
+            .FirstOrDefaultAsync(ct);
+        return doc?.Members;
+    }
+
+    public async Task<IReadOnlyList<Board>> ListAsync(string userId, CancellationToken ct)
     {
         // Shapes can be large; lists only need the summary fields.
-        var docs = await _boards.Find(FilterDefinition<BoardDocument>.Empty)
+        var docs = await _boards.Find(Builders<BoardDocument>.Filter.ElemMatch(b => b.Members, m => m.UserId == userId))
             .Project<BoardDocument>(Builders<BoardDocument>.Projection.Exclude(b => b.Shapes))
             .SortByDescending(b => b.UpdatedAt)
             .Limit(200)
@@ -55,6 +70,46 @@ public sealed class MongoBoardStore(IMongoDatabase database, TimeProvider time, 
 
     public async Task<bool> DeleteAsync(string id, CancellationToken ct) =>
         (await _boards.DeleteOneAsync(b => b.Id == id, ct)).DeletedCount == 1;
+
+    public async Task<bool> SetMemberAsync(string id, BoardMember member, CancellationToken ct)
+    {
+        var filter = Builders<BoardDocument>.Filter;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            // Already a member: change the role in place.
+            var changed = await _boards.UpdateOneAsync(
+                filter.Eq(b => b.Id, id) & filter.ElemMatch(b => b.Members, m => m.UserId == member.UserId),
+                Builders<BoardDocument>.Update.Set("members.$.role", member.Role),
+                cancellationToken: ct);
+            if (changed.MatchedCount == 1)
+            {
+                return true;
+            }
+
+            // Not a member yet: add, unless someone else just did (then go round again).
+            var added = await _boards.UpdateOneAsync(
+                filter.Eq(b => b.Id, id) & filter.Not(filter.ElemMatch(b => b.Members, m => m.UserId == member.UserId)),
+                Builders<BoardDocument>.Update.Push(b => b.Members, member),
+                cancellationToken: ct);
+            if (added.MatchedCount == 1)
+            {
+                return true;
+            }
+
+            if (await GetMembersAsync(id, ct) is null)
+            {
+                return false;
+            }
+        }
+
+        throw new InvalidOperationException($"Couldn't update the members of board {id}.");
+    }
+
+    public async Task<bool> RemoveMemberAsync(string id, string userId, CancellationToken ct) =>
+        (await _boards.UpdateOneAsync(
+            b => b.Id == id,
+            Builders<BoardDocument>.Update.PullFilter(b => b.Members, m => m.UserId == userId),
+            cancellationToken: ct)).MatchedCount == 1;
 
     /// <summary>
     /// Read, apply in memory, then write back only if nobody else wrote in between (the version still
@@ -97,6 +152,9 @@ public sealed class MongoBoardStore(IMongoDatabase database, TimeProvider time, 
         await boards.Indexes.CreateOneAsync(
             new CreateIndexModel<BoardDocument>(Builders<BoardDocument>.IndexKeys.Descending(b => b.UpdatedAt)),
             cancellationToken: ct);
+        await boards.Indexes.CreateOneAsync(
+            new CreateIndexModel<BoardDocument>(Builders<BoardDocument>.IndexKeys.Ascending("members.userId").Descending(b => b.UpdatedAt)),
+            cancellationToken: ct);
     }
 }
 
@@ -118,12 +176,15 @@ public sealed class BoardDocument
 
     public List<Shape> Shapes { get; set; } = new();
 
-    public Board ToBoard() => new(Id, Title, new DateTimeOffset(CreatedAt, TimeSpan.Zero), new DateTimeOffset(UpdatedAt, TimeSpan.Zero));
+    public List<BoardMember> Members { get; set; } = new();
+
+    public Board ToBoard() =>
+        new(Id, Title, new DateTimeOffset(CreatedAt, TimeSpan.Zero), new DateTimeOffset(UpdatedAt, TimeSpan.Zero), Members);
 
     public BoardContent ToContent()
     {
         var b = ToBoard();
-        return new BoardContent(b.Id, b.Title, b.CreatedAt, b.UpdatedAt, Version, Shapes);
+        return new BoardContent(b.Id, b.Title, b.CreatedAt, b.UpdatedAt, Version, Shapes, Members);
     }
 }
 
@@ -150,7 +211,11 @@ public static class MongoConventions
 /// <summary>Creates indexes once at startup.</summary>
 public sealed class MongoIndexInitializer(IMongoDatabase database) : IHostedService
 {
-    public Task StartAsync(CancellationToken cancellationToken) => MongoBoardStore.EnsureIndexesAsync(database, cancellationToken);
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        await MongoBoardStore.EnsureIndexesAsync(database, cancellationToken);
+        await Accounts.MongoUserStore.EnsureIndexesAsync(database, cancellationToken);
+    }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

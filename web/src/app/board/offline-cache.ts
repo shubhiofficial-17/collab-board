@@ -64,6 +64,16 @@ export class OfflineCache {
     }
   }
 
+  /** Forgets every cached board, e.g. on sign-out. */
+  clear(): void {
+    try {
+      const keys = Array.from({ length: this.storage?.length ?? 0 }, (_, i) => this.storage!.key(i));
+      keys.filter((key) => key?.startsWith(PREFIX)).forEach((key) => this.storage!.removeItem(key!));
+    } catch {
+      // ignore
+    }
+  }
+
   private write(boardId: string, value: CachedBoard): void {
     try {
       this.storage?.setItem(PREFIX + boardId, JSON.stringify(value));

@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using CollabBoard.Api.Accounts;
 using CollabBoard.Api.Boards;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace CollabBoard.Api.Realtime;
@@ -19,6 +21,7 @@ public sealed record JoinResult(long Version, IReadOnlyList<Participant> Partici
 /// Changes themselves are saved over HTTP (POST /api/boards/{id}/ops) and broadcast from there, so the
 /// save path has one implementation with retries and validation. See ADR 0004.
 /// </summary>
+[Authorize]
 public sealed class BoardHub(IBoardStore store, PresenceTracker presence) : Hub
 {
     public const string Path = "/hubs/board";
@@ -27,10 +30,15 @@ public sealed class BoardHub(IBoardStore store, PresenceTracker presence) : Hub
 
     public async Task<JoinResult> JoinBoard(string boardId, string name, string color)
     {
-        var board = await store.GetAsync(boardId, Context.ConnectionAborted)
-                    ?? throw new HubException("Board not found.");
+        var board = await store.GetAsync(boardId, Context.ConnectionAborted);
+        if (board is null || BoardRoles.RoleOf(board.Members, Context.User!.Id()) is null)
+        {
+            throw new HubException("Board not found.");
+        }
 
-        var me = new Participant(Context.ConnectionId, Clean(name, 40, "Guest"), Clean(color, 7, "#4f46e5"));
+        // The account name, so people can't pose as someone else; the client's name is only a fallback.
+        var accountName = Context.User?.Identity?.Name;
+        var me = new Participant(Context.ConnectionId, Clean(accountName ?? name, 40, "Guest"), Clean(color, 7, "#4f46e5"));
         await Groups.AddToGroupAsync(Context.ConnectionId, Group(boardId));
         presence.Join(boardId, me);
         await Clients.OthersInGroup(Group(boardId)).SendAsync("ParticipantJoined", me);

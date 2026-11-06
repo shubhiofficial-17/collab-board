@@ -1,0 +1,45 @@
+<main class="sign-in">
+  <h1>Collab Board</h1>
+  <form (ngSubmit)="submit()" aria-label="{{ mode() === 'signin' ? 'Sign in' : 'Create account' }}">
+    <h2>{{ mode() === 'signin' ? 'Sign in' : 'Create an account' }}</h2>
+
+    <label>
+      Email
+      <input name="email" type="email" autocomplete="email" required [(ngModel)]="email" />
+    </label>
+
+    @if (mode() === 'signup') {
+      <label>
+        Name
+        <input name="name" autocomplete="name" maxlength="60" required [(ngModel)]="name" />
+      </label>
+    }
+
+    <label>
+      Password
+      <input
+        name="password"
+        type="password"
+        required
+        minlength="8"
+        [attr.autocomplete]="mode() === 'signin' ? 'current-password' : 'new-password'"
+        [(ngModel)]="password"
+      />
+    </label>
+
+    @if (error(); as message) {
+      <p class="error" role="alert">{{ message }}</p>
+    }
+
+    <button class="primary" type="submit" [disabled]="busy()">
+      {{ mode() === 'signin' ? 'Sign in' : 'Create account' }}
+    </button>
+  </form>
+
+  <p class="switch">
+    {{ mode() === 'signin' ? 'New here?' : 'Already have an account?' }}
+    <button type="button" class="link" (click)="toggle()">
+      {{ mode() === 'signin' ? 'Create an account' : 'Sign in' }}
+    </button>
+  </p>
+</main>

@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using CollabBoard.Api.Accounts;
 using CollabBoard.Api.Realtime;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,36 +11,53 @@ public static class BoardEndpoints
 
     public static RouteGroupBuilder MapBoardEndpoints(this IEndpointRouteBuilder app)
     {
-        var boards = app.MapGroup("/api/boards");
+        // Everything here needs a signed-in user. Boards someone can't access are reported as not found,
+        // so ids can't be probed; boards they can see but not change get 403.
+        var boards = app.MapGroup("/api/boards").RequireAuthorization();
 
-        boards.MapGet("/", async (IBoardStore store, CancellationToken ct) => Results.Ok(await store.ListAsync(ct)));
+        boards.MapGet("/", async (ClaimsPrincipal user, IBoardStore store, CancellationToken ct) =>
+            Results.Ok(await store.ListAsync(user.Id(), ct)));
 
-        boards.MapGet("/{id}", async (string id, IBoardStore store, CancellationToken ct) =>
-            await store.GetAsync(id, ct) is { } board ? Results.Ok(board) : Results.NotFound());
+        boards.MapGet("/{id}", async (string id, ClaimsPrincipal user, IBoardStore store, CancellationToken ct) =>
+            await store.GetAsync(id, ct) is { } board && BoardRoles.RoleOf(board.Members, user.Id()) is not null
+                ? Results.Ok(board)
+                : Results.NotFound());
 
-        boards.MapPost("/", async (CreateBoardRequest request, IBoardStore store, CancellationToken ct) =>
+        boards.MapPost("/", async (CreateBoardRequest request, ClaimsPrincipal user, IBoardStore store, CancellationToken ct) =>
         {
             if (!TryCleanTitle(request.Title, out var title, out var problem))
             {
                 return problem;
             }
 
-            var board = await store.CreateAsync(title, ct);
+            var board = await store.CreateAsync(title, user.Id(), ct);
             return Results.Created($"/api/boards/{board.Id}", board);
         });
 
-        boards.MapPatch("/{id}", async (string id, RenameBoardRequest request, IBoardStore store, CancellationToken ct) =>
+        boards.MapPatch("/{id}", async (string id, RenameBoardRequest request, ClaimsPrincipal user, IBoardStore store, CancellationToken ct) =>
         {
             if (!TryCleanTitle(request.Title, out var title, out var problem))
             {
                 return problem;
+            }
+
+            if (await RequireRole(id, BoardRoles.Editor, user, store, ct) is { } denied)
+            {
+                return denied;
             }
 
             return await store.RenameAsync(id, title, ct) is { } board ? Results.Ok(board) : Results.NotFound();
         });
 
-        boards.MapDelete("/{id}", async (string id, IBoardStore store, CancellationToken ct) =>
-            await store.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound());
+        boards.MapDelete("/{id}", async (string id, ClaimsPrincipal user, IBoardStore store, CancellationToken ct) =>
+        {
+            if (await RequireRole(id, BoardRoles.Owner, user, store, ct) is { } denied)
+            {
+                return denied;
+            }
+
+            return await store.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound();
+        });
 
         // Saves a batch of changes made in the editor, all or nothing, and broadcasts it to everyone else
         // viewing the board. X-Connection-Id is the sender's real-time connection, so it isn't echoed back.
@@ -46,9 +65,16 @@ public static class BoardEndpoints
             string id,
             ApplyOpsRequest request,
             [FromHeader(Name = "X-Connection-Id")] string? connectionId,
+            ClaimsPrincipal user,
+            IBoardStore store,
             BoardChanges changes,
             CancellationToken ct) =>
         {
+            if (await RequireRole(id, BoardRoles.Editor, user, store, ct) is { } denied)
+            {
+                return denied;
+            }
+
             try
             {
                 return await changes.ApplyAsync(id, request.Ops, connectionId, ct) is { } result ? Results.Ok(result) : Results.NotFound();
@@ -60,6 +86,21 @@ public static class BoardEndpoints
         });
 
         return boards;
+    }
+
+    /// <summary>Null if the user has at least <paramref name="role"/> on the board, otherwise the response to send.</summary>
+    public static async Task<IResult?> RequireRole(string id, string role, ClaimsPrincipal user, IBoardStore store, CancellationToken ct)
+    {
+        var mine = BoardRoles.RoleOf(await store.GetMembersAsync(id, ct), user.Id());
+        if (mine is null)
+        {
+            return Results.NotFound();
+        }
+
+        return BoardRoles.Rank(mine) >= BoardRoles.Rank(role)
+            ? null
+            : Results.Problem($"You need to be {(role == BoardRoles.Owner ? "the owner" : "an editor")} of this board to do that.",
+                statusCode: StatusCodes.Status403Forbidden, title: "Not allowed");
     }
 
     private static bool TryCleanTitle(string? raw, out string title, out IResult problem)
