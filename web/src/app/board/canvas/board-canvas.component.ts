@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import { RemoteCursor } from '../../realtime/realtime.service';
 import { BoardState } from '../board-state';
 import { normalizePath, pathData, rectFromPoints } from '../model/geometry';
 import { Op } from '../model/ops';
@@ -32,6 +33,12 @@ export class BoardCanvasComponent {
   readonly state = inject(BoardState);
   private readonly svg = viewChild.required<ElementRef<SVGSVGElement>>('svg');
   private readonly editor = viewChild<ElementRef<HTMLTextAreaElement>>('editor');
+
+  /** Other people's cursors, drawn on top of the board. */
+  readonly remoteCursors = input<RemoteCursor[]>([]);
+
+  /** This user's pointer position in world coordinates, for sharing with others. */
+  readonly cursorMoved = output<Point>();
 
   private drag: Drag | null = null;
   private readonly spaceHeld = signal(false);
@@ -83,6 +90,11 @@ export class BoardCanvasComponent {
       fontSize: 15 * v.zoom,
     };
   });
+
+  /** Remote cursors keep the same on-screen size whatever the zoom. */
+  cursorTransform(cursor: RemoteCursor): string {
+    return `translate(${cursor.x} ${cursor.y}) scale(${1 / this.state.viewport().zoom})`;
+  }
 
   pathD(shape: Shape): string {
     return pathData(shape.points ?? []);
@@ -167,13 +179,14 @@ export class BoardCanvasComponent {
   }
 
   onPointerMove(event: PointerEvent): void {
+    const screen = this.screenPoint(event);
+    const world = screenToWorld(this.state.viewport(), screen);
+    this.cursorMoved.emit(world);
+
     const drag = this.drag;
     if (!drag) {
       return;
     }
-
-    const screen = this.screenPoint(event);
-    const world = screenToWorld(this.state.viewport(), screen);
 
     switch (drag.kind) {
       case 'pan':

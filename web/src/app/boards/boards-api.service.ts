@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { Op } from '../board/model/ops';
@@ -28,8 +28,12 @@ export class BoardsApi {
     return this.http.delete<void>(`/api/boards/${encodeURIComponent(id)}`);
   }
 
-  /** Saves a batch of changes; returns the board's new version. */
-  applyOps(id: string, ops: Op[]): Observable<{ version: number }> {
-    return this.http.post<{ version: number }>(`/api/boards/${encodeURIComponent(id)}/ops`, { ops });
+  /**
+   * Saves a batch of changes; returns the board's new version. `connectionId` identifies this tab's
+   * real-time connection, so the server broadcasts the changes to everyone except us.
+   */
+  applyOps(id: string, ops: Op[], connectionId?: string | null): Observable<{ version: number }> {
+    const headers = connectionId ? new HttpHeaders({ 'X-Connection-Id': connectionId }) : undefined;
+    return this.http.post<{ version: number }>(`/api/boards/${encodeURIComponent(id)}/ops`, { ops }, { headers });
   }
 }

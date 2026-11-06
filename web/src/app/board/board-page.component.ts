@@ -2,6 +2,9 @@ import { Component, ElementRef, HostListener, OnInit, effect, inject, input, sig
 import { RouterLink } from '@angular/router';
 import { Board } from '../boards/board';
 import { BoardsApi } from '../boards/boards-api.service';
+import { loadIdentity } from '../realtime/identity';
+import { RealtimeService } from '../realtime/realtime.service';
+import { Point } from './model/viewport';
 import { BoardState } from './board-state';
 import { BoardSync } from './board-sync';
 import { BoardCanvasComponent } from './canvas/board-canvas.component';
@@ -11,8 +14,8 @@ import { ToolbarComponent } from './toolbar/toolbar.component';
   selector: 'app-board-page',
   standalone: true,
   imports: [RouterLink, BoardCanvasComponent, ToolbarComponent],
-  // One state and one save queue per open board.
-  providers: [BoardState, BoardSync],
+  // One state, save queue and live connection per open board.
+  providers: [BoardState, BoardSync, RealtimeService],
   templateUrl: './board-page.component.html',
   styleUrl: './board-page.component.css',
 })
@@ -20,6 +23,7 @@ export class BoardPageComponent implements OnInit {
   private readonly api = inject(BoardsApi);
   private readonly state = inject(BoardState);
   readonly sync = inject(BoardSync);
+  readonly realtime = inject(RealtimeService);
 
   /** Bound from the :id route parameter (withComponentInputBinding). */
   readonly id = input.required<string>();
@@ -39,11 +43,40 @@ export class BoardPageComponent implements OnInit {
       next: (content) => {
         this.board.set(content);
         this.state.load(content.shapes);
-        this.sync.start(content.id, this.state.committed);
+        this.sync.start(content.id, this.state.committed, () => this.realtime.connectionId);
         this.loaded.set(true);
+        void this.realtime.connect(content.id, loadIdentity(), {
+          onOps: (message) => this.state.applyRemote(message.ops),
+          onResync: () => this.resync(),
+        });
       },
       error: () => this.notFound.set(true),
     });
+  }
+
+  onCursorMoved(point: Point): void {
+    this.realtime.moveCursor(point.x, point.y);
+  }
+
+  /** After a reconnect, changes may have been missed: reload the board, keeping unsaved local edits. */
+  private resync(): void {
+    const board = this.board();
+    if (!board) {
+      return;
+    }
+
+    this.api.get(board.id).subscribe({
+      next: (content) => this.state.resync(content.shapes, this.sync.unsaved),
+    });
+  }
+
+  initials(name: string): string {
+    return name
+      .split(/\s+/)
+      .map((part) => part[0] ?? '')
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
   }
 
   rename(title: string): void {

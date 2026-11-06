@@ -13,8 +13,8 @@ Built with **Angular 18** (standalone components, signals), **.NET 8** (minimal 
 | 1. Skeleton | .NET API, Angular app, Docker Compose, CI | ✅ Done |
 | 2. Canvas | Shapes, sticky notes, freehand drawing, select and move, pan and zoom, undo/redo | ✅ Done |
 | 3. Persistence | Boards saved in MongoDB as operations, with optimistic concurrency; rename and delete | ✅ Done |
-| 4. Real time | Live sync between users, presence and cursors (SignalR) | ⏳ Next |
-| 5. Conflict-free editing | CRDTs and offline editing | Planned |
+| 4. Real time | Live sync between users, presence avatars and live cursors (SignalR), auto-reconnect with resync | ✅ Done |
+| 5. Conflict-free editing | CRDTs and offline editing | ⏳ Next |
 | 6. Accounts and sharing | Sign-in, invite links, viewer and editor roles | Planned |
 | 7. History | Version history and restore | Planned |
 | 8. AI | Turn a prompt into a diagram | Planned |
@@ -38,7 +38,7 @@ Built with **Angular 18** (standalone components, signals), **.NET 8** (minimal 
 docker compose up --build
 ```
 
-Open http://localhost:8080. Boards are stored in MongoDB (a Docker volume keeps them across restarts).
+Open http://localhost:8080, then open the same board in a second window to see live sync and cursors. Boards are stored in MongoDB (a Docker volume keeps them across restarts).
 
 ### Develop
 

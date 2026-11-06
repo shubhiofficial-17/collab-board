@@ -38,11 +38,11 @@ describe('BoardSync', () => {
     changes.next([del('c')]);
 
     expect(api.applyOps).toHaveBeenCalledTimes(1);
-    expect(api.applyOps.calls.argsFor(0)).toEqual(['b1', [del('a')]]);
+    expect(api.applyOps.calls.argsFor(0)).toEqual(['b1', [del('a')], null]);
     expect(sync.status()).toBe('saving');
 
     respond(0);
-    expect(api.applyOps.calls.argsFor(1)).toEqual(['b1', [del('b'), del('c')]]);
+    expect(api.applyOps.calls.argsFor(1)).toEqual(['b1', [del('b'), del('c')], null]);
 
     respond(1);
     expect(sync.status()).toBe('saved');
@@ -64,7 +64,7 @@ describe('BoardSync', () => {
     });
     changes.next([del('b')]);
 
-    expect(api.applyOps.calls.mostRecent().args).toEqual(['b1', [del('a'), del('b')]]);
+    expect(api.applyOps.calls.mostRecent().args).toEqual(['b1', [del('a'), del('b')], null]);
     respond(0);
     expect(sync.status()).toBe('saved');
   }));

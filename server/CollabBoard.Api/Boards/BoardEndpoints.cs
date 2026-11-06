@@ -1,3 +1,6 @@
+using CollabBoard.Api.Realtime;
+using Microsoft.AspNetCore.Mvc;
+
 namespace CollabBoard.Api.Boards;
 
 public static class BoardEndpoints
@@ -37,12 +40,18 @@ public static class BoardEndpoints
         boards.MapDelete("/{id}", async (string id, IBoardStore store, CancellationToken ct) =>
             await store.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound());
 
-        // Saves a batch of changes made in the editor. Applied atomically: all or nothing.
-        boards.MapPost("/{id}/ops", async (string id, ApplyOpsRequest request, IBoardStore store, CancellationToken ct) =>
+        // Saves a batch of changes made in the editor, all or nothing, and broadcasts it to everyone else
+        // viewing the board. X-Connection-Id is the sender's real-time connection, so it isn't echoed back.
+        boards.MapPost("/{id}/ops", async (
+            string id,
+            ApplyOpsRequest request,
+            [FromHeader(Name = "X-Connection-Id")] string? connectionId,
+            BoardChanges changes,
+            CancellationToken ct) =>
         {
             try
             {
-                return await store.ApplyOpsAsync(id, request.Ops, ct) is { } result ? Results.Ok(result) : Results.NotFound();
+                return await changes.ApplyAsync(id, request.Ops, connectionId, ct) is { } result ? Results.Ok(result) : Results.NotFound();
             }
             catch (BoardOpException ex)
             {

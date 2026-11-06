@@ -1,4 +1,5 @@
 using CollabBoard.Api.Boards;
+using CollabBoard.Api.Realtime;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,12 +24,24 @@ else
     builder.Services.AddSingleton<IBoardStore, InMemoryBoardStore>();
 }
 
+// Real time: SignalR, with a Redis backplane when several server instances share the load.
+var signalR = builder.Services.AddSignalR();
+var redis = builder.Configuration.GetConnectionString("Redis");
+if (!string.IsNullOrWhiteSpace(redis))
+{
+    signalR.AddStackExchangeRedis(redis, options => options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal("collab-board"));
+}
+
+builder.Services.AddSingleton<PresenceTracker>();
+builder.Services.AddSingleton<BoardChanges>();
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 app.MapBoardEndpoints();
+app.MapHub<BoardHub>(BoardHub.Path);
 
 app.Run();
 
