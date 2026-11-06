@@ -1,8 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { BoardState } from './board-state';
+import { StampedOp } from './model/crdt';
 import { Shape } from './model/shapes';
 
 const rect = (id: string, x = 0): Shape => ({ id, kind: 'rect', x, y: 0, w: 10, h: 10, color: '#fff', z: 1 });
+
+const EARLIER = '0000000000001:0000:remote';
+const LATER = '9000000000000:0000:remote';
 
 describe('BoardState', () => {
   let state: BoardState;
@@ -89,7 +93,10 @@ describe('BoardState', () => {
     state.select(['a']);
     state.editingId.set('a');
 
-    state.applyRemote([{ type: 'add', shape: rect('b') }, { type: 'delete', id: 'a' }]);
+    state.applyRemote([
+      { type: 'add', shape: rect('b'), ts: LATER },
+      { type: 'delete', id: 'a', ts: LATER },
+    ]);
 
     expect([...state.shapes().keys()]).toEqual(['b']);
     expect(state.selection().size).toBe(0);
@@ -101,9 +108,51 @@ describe('BoardState', () => {
   it('resyncs to the server copy and keeps unsaved local edits on top', () => {
     state.apply([{ type: 'add', shape: rect('mine') }]);
 
-    state.resync([rect('theirs')], [{ type: 'add', shape: rect('mine') }]);
+    state.resync([rect('theirs')], [{ type: 'add', shape: rect('mine'), ts: LATER }]);
 
     expect([...state.shapes().keys()].sort()).toEqual(['mine', 'theirs']);
     expect(state.canUndo()).toBeTrue();
+  });
+
+  it('timestamps every committed change, later each time', () => {
+    const sent: StampedOp[] = [];
+    state.committed.subscribe((ops) => sent.push(...ops));
+
+    state.apply([{ type: 'add', shape: rect('a') }]);
+    state.apply([{ type: 'update', id: 'a', patch: { x: 5 } }]);
+    state.undo();
+
+    expect(sent.length).toBe(3);
+    expect(sent[0].ts < sent[1].ts && sent[1].ts < sent[2].ts).toBeTrue();
+  });
+
+  it('ignores a remote change older than the local value', () => {
+    state.apply([{ type: 'add', shape: rect('a') }]);
+    state.apply([{ type: 'update', id: 'a', patch: { color: '#111111' } }]);
+
+    state.applyRemote([{ type: 'update', id: 'a', patch: { color: '#222222' }, ts: EARLIER }]);
+
+    expect(state.shape('a')!.color).toBe('#111111');
+  });
+
+  it('keeps a remote change to another field of the same shape', () => {
+    state.apply([{ type: 'add', shape: rect('a') }]);
+    state.apply([{ type: 'update', id: 'a', patch: { color: '#111111' } }]);
+
+    state.applyRemote([{ type: 'update', id: 'a', patch: { x: 40 }, ts: EARLIER }]);
+
+    // x was last written by the local add, which is newer than EARLIER, so x stays.
+    expect(state.shape('a')!.x).toBe(rect('a').x);
+    state.applyRemote([{ type: 'update', id: 'a', patch: { x: 40 }, ts: LATER }]);
+    expect(state.shape('a')!.x).toBe(40);
+    expect(state.shape('a')!.color).toBe('#111111');
+  });
+
+  it('makes local edits win over remote ones it has already seen', () => {
+    state.applyRemote([{ type: 'add', shape: rect('a'), ts: LATER }]);
+
+    state.apply([{ type: 'update', id: 'a', patch: { x: 7 } }]);
+
+    expect(state.shape('a')!.x).toBe(7);
   });
 });

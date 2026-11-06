@@ -3,15 +3,15 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, throwError } from 'rxjs';
 import { BoardsApi } from '../boards/boards-api.service';
 import { BoardSync } from './board-sync';
-import { Op } from './model/ops';
+import { StampedOp } from './model/crdt';
 
 describe('BoardSync', () => {
   let api: jasmine.SpyObj<BoardsApi>;
   let sync: BoardSync;
-  let changes: Subject<Op[]>;
+  let changes: Subject<StampedOp[]>;
   let responses: Subject<{ version: number }>[];
 
-  const del = (id: string): Op => ({ type: 'delete', id });
+  const del = (id: string): StampedOp => ({ type: 'delete', id, ts: `0000000000001:0000:${id}` });
 
   beforeEach(() => {
     responses = [];
@@ -23,7 +23,7 @@ describe('BoardSync', () => {
     });
     TestBed.configureTestingModule({ providers: [BoardSync, { provide: BoardsApi, useValue: api }] });
     sync = TestBed.inject(BoardSync);
-    changes = new Subject<Op[]>();
+    changes = new Subject<StampedOp[]>();
     sync.start('b1', changes);
   });
 

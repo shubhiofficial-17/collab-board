@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { DestroyRef, Injectable, inject, signal } from '@angular/core';
 import { Observable, Subscription, retry, throwError, timer } from 'rxjs';
 import { BoardsApi } from '../boards/boards-api.service';
-import { Op } from './model/ops';
+import { StampedOp } from './model/crdt';
 
 export type SaveStatus = 'saved' | 'saving' | 'offline' | 'rejected';
 
@@ -20,15 +20,15 @@ export class BoardSync {
 
   private boardId = '';
   private connectionId: () => string | null = () => null;
-  private queue: Op[] = [];
-  private inFlightBatch: Op[] | null = null;
+  private queue: StampedOp[] = [];
+  private inFlightBatch: StampedOp[] | null = null;
   private subscription?: Subscription;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.subscription?.unsubscribe());
   }
 
-  start(boardId: string, changes: Observable<Op[]>, connectionId: () => string | null = () => null): void {
+  start(boardId: string, changes: Observable<StampedOp[]>, connectionId: () => string | null = () => null): void {
     this.boardId = boardId;
     this.connectionId = connectionId;
     this.subscription?.unsubscribe();
@@ -40,7 +40,7 @@ export class BoardSync {
   }
 
   /** Changes not yet confirmed by the server, oldest first. */
-  get unsaved(): Op[] {
+  get unsaved(): StampedOp[] {
     return [...(this.inFlightBatch ?? []), ...this.queue];
   }
 
@@ -49,7 +49,7 @@ export class BoardSync {
     this.flush();
   }
 
-  private enqueue(ops: Op[]): void {
+  private enqueue(ops: StampedOp[]): void {
     if (ops.length === 0) {
       return;
     }

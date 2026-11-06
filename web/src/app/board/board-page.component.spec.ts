@@ -68,8 +68,8 @@ describe('BoardPageComponent', () => {
     state().undo();
 
     expect(api.applyOps.calls.allArgs()).toEqual([
-      ['b1', [{ type: 'delete', id: 's1' }], 'conn-me'],
-      ['b1', [{ type: 'add', shape: content.shapes[0] }], 'conn-me'],
+      ['b1', [{ type: 'delete', id: 's1', ts: jasmine.any(String) }], 'conn-me'],
+      ['b1', [{ type: 'add', shape: content.shapes[0], ts: jasmine.any(String) }], 'conn-me'],
     ]);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[role=status]').textContent).toContain('Saved');
