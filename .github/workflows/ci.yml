@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore 2>&1 | tee restore.log; exit ${PIPESTATUS[0]}
+      - name: Build
+        run: dotnet build --no-restore -c Release 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+      - name: Test
+        run: dotnet test --no-build -c Release --logger GitHubActions --logger "console;verbosity=normal" 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: npm install --no-audit --no-fund 2>&1 | tee install.log; exit ${PIPESTATUS[0]}
+      - name: Test
+        run: npm run test:ci 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+      - name: Build
+        run: npx ng build --configuration production 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+
+  images:
+    runs-on: ubuntu-latest
+    needs: [server, web]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: docker compose build

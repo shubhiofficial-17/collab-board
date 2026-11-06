@@ -1,0 +1,14 @@
+@if (notFound()) {
+  <main class="message">
+    <p>This board doesn't exist or was deleted.</p>
+    <a routerLink="/">Back to boards</a>
+  </main>
+} @else {
+  <div class="layout">
+    <header class="topbar">
+      <a routerLink="/" class="back" aria-label="Back to boards">←</a>
+      <h1>{{ board()?.title ?? 'Loading…' }}</h1>
+    </header>
+    <section class="canvas-area" aria-label="Board canvas"></section>
+  </div>
+}

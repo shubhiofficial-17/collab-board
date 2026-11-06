@@ -1,0 +1,37 @@
+<main class="home">
+  <header>
+    <h1>Collab Board</h1>
+    <p class="tagline">Draw, plan and brainstorm together in real time.</p>
+  </header>
+
+  <form class="create" (ngSubmit)="create()">
+    <input name="title" [(ngModel)]="title" placeholder="Board name (optional)" maxlength="120" aria-label="Board name" />
+    <button class="primary" type="submit" [disabled]="creating()">
+      {{ creating() ? 'Creating…' : 'New board' }}
+    </button>
+  </form>
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  <section aria-label="Your boards">
+    <h2>Boards</h2>
+    @if (loading()) {
+      <p class="muted">Loading…</p>
+    } @else {
+      <ul class="boards">
+        @for (board of boards(); track board.id) {
+          <li>
+            <a [routerLink]="['/b', board.id]">
+              <span class="name">{{ board.title }}</span>
+              <span class="muted">Updated {{ board.updatedAt | date: 'medium' }}</span>
+            </a>
+          </li>
+        } @empty {
+          <li class="muted empty">No boards yet. Create one above.</li>
+        }
+      </ul>
+    }
+  </section>
+</main>

@@ -1,0 +1,10 @@
+services:
+  server:
+    build: ./server
+
+  web:
+    build: ./web
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
