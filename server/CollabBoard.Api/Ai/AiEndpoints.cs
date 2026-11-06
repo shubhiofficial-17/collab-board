@@ -1,8 +1,6 @@
 using System.Security.Claims;
-using System.Threading.RateLimiting;
 using CollabBoard.Api.Accounts;
 using CollabBoard.Api.Boards;
-using Microsoft.AspNetCore.RateLimiting;
 
 namespace CollabBoard.Api.Ai;
 
@@ -21,14 +19,6 @@ public static class AiEndpoints
         services.AddHttpClient<ILlmClient, OpenAiCompatibleClient>(http => http.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds));
         services.AddTransient<DiagramGenerator>();
 
-        // Model calls cost money: each user gets a few per minute.
-        services.AddRateLimiter(limiter =>
-        {
-            limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            limiter.AddPolicy(RateLimitPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
-                context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anonymous",
-                _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
-        });
         return services;
     }
 

@@ -4,6 +4,7 @@ services:
     environment:
       ConnectionStrings__Mongo: "mongodb://mongo:27017/collab"
       DataProtection__KeysPath: /keys
+      ForwardedHeaders__Enabled: "true"
       # AI diagrams (optional): point at the LLM Gateway or any OpenAI-compatible API.
       Ai__BaseUrl: ${AI_BASE_URL:-}
       Ai__ApiKey: ${AI_API_KEY:-}

@@ -16,6 +16,7 @@ public sealed record SignInRequest(string? Email, string? Password);
 public static class AccountEndpoints
 {
     public const int MinPasswordLength = 8;
+    public const string RateLimitPolicy = "sign-in";
 
     // Verified when the email is unknown, so a wrong email takes as long as a wrong password.
     private static readonly string DummyHash = Passwords.Hash(Guid.NewGuid().ToString());
@@ -64,7 +65,7 @@ public static class AccountEndpoints
 
             await SignInAsync(http, user);
             return Results.Ok(new Me(user.Id, user.Email, user.Name));
-        });
+        }).RequireRateLimiting(RateLimitPolicy);
 
         account.MapPost("/signin", async (SignInRequest request, IUserStore users, HttpContext http, CancellationToken ct) =>
         {
@@ -78,7 +79,7 @@ public static class AccountEndpoints
 
             await SignInAsync(http, user);
             return Results.Ok(new Me(user.Id, user.Email, user.Name));
-        });
+        }).RequireRateLimiting(RateLimitPolicy);
 
         account.MapPost("/signout", async (HttpContext http) =>
         {
