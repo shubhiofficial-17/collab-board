@@ -53,6 +53,8 @@ export class BoardState {
   readonly color = signal<string>(PALETTE[0]);
   readonly viewport = signal<Viewport>({ x: 0, y: 0, zoom: 1 });
   readonly editingId = signal<string | null>(null);
+  /** For viewers: shapes can be looked at but not changed. Remote changes still come in. */
+  readonly readOnly = signal(false);
   readonly canUndo = computed(() => this._undo().length > 0);
   readonly canRedo = computed(() => this._redo().length > 0);
 
@@ -114,7 +116,7 @@ export class BoardState {
 
   /** Applies operations as one undo step. */
   apply(ops: Op[]): void {
-    if (ops.length === 0) {
+    if (ops.length === 0 || this.readOnly()) {
       return;
     }
 
@@ -125,11 +127,19 @@ export class BoardState {
   }
 
   beginGesture(): void {
+    if (this.readOnly()) {
+      return;
+    }
+
     this.gesture = { before: this.shapes(), touched: new Set() };
   }
 
   /** Applies operations live during a gesture, without creating undo steps. */
   applyLive(ops: Op[]): void {
+    if (this.readOnly()) {
+      return;
+    }
+
     if (!this.gesture) {
       this.apply(ops);
       return;
@@ -156,6 +166,10 @@ export class BoardState {
   }
 
   undo(): void {
+    if (this.readOnly()) {
+      return;
+    }
+
     const entry = this._undo().at(-1);
     if (!entry) {
       return;
@@ -167,6 +181,10 @@ export class BoardState {
   }
 
   redo(): void {
+    if (this.readOnly()) {
+      return;
+    }
+
     const entry = this._redo().at(-1);
     if (!entry) {
       return;

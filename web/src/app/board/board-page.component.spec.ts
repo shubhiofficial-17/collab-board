@@ -8,6 +8,7 @@ import { BoardsApi } from '../boards/boards-api.service';
 import { BoardPageComponent } from './board-page.component';
 import { BoardState } from './board-state';
 import { StampedOp } from './model/crdt';
+import { AuthService } from '../auth/auth.service';
 import { FakeHubConnection } from '../realtime/fake-hub-connection';
 import { HUB_CONNECTION_FACTORY } from '../realtime/realtime.service';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -160,6 +161,28 @@ describe('BoardPageComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain("doesn't exist");
     expect(TestBed.inject(OfflineCache).load('b1')).toBeNull();
+  });
+
+  it('opens in view-only mode for viewers', async () => {
+    api.get.and.returnValue(of({ ...content, members: [{ userId: 'u-me', role: 'viewer' as const }] }));
+    setup();
+    TestBed.inject(AuthService).me.set({ id: 'u-me', email: 'me@example.com', name: 'Me' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('View only');
+    expect(fixture.nativeElement.querySelector('app-toolbar')).toBeNull();
+    expect(state().readOnly()).toBeTrue();
+    expect(fixture.nativeElement.querySelector('button.share')).toBeNull();
+  });
+
+  it('offers sharing to the owner', () => {
+    api.get.and.returnValue(of({ ...content, members: [{ userId: 'u-me', role: 'owner' as const }] }));
+    setup();
+    TestBed.inject(AuthService).me.set({ id: 'u-me', email: 'me@example.com', name: 'Me' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('button.share')).not.toBeNull();
+    expect(state().readOnly()).toBeFalse();
   });
 
   function seedCache(pending: StampedOp[]) {

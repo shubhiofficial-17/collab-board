@@ -95,6 +95,25 @@ public abstract class BoardStoreContract
         Assert.Null(BoardRoles.RoleOf(await Store.GetMembersAsync(board.Id, CancellationToken.None), "u2"));
         Assert.Null(await Store.GetMembersAsync("missing", CancellationToken.None));
     }
+
+    [Fact]
+    public async Task Share_links_can_be_found_replaced_and_removed()
+    {
+        var board = await Store.CreateAsync("Links", "owner1", CancellationToken.None);
+        var token = Guid.NewGuid().ToString("N");
+
+        Assert.True(await Store.SetShareLinkAsync(board.Id, BoardRoles.Viewer, token, CancellationToken.None));
+        Assert.Equal(new ShareLinkTarget(board.Id, BoardRoles.Viewer), await Store.FindShareLinkAsync(token, CancellationToken.None));
+
+        var newer = Guid.NewGuid().ToString("N");
+        await Store.SetShareLinkAsync(board.Id, BoardRoles.Viewer, newer, CancellationToken.None);
+        Assert.Null(await Store.FindShareLinkAsync(token, CancellationToken.None));
+        Assert.Equal(newer, Assert.Single((await Store.GetShareLinksAsync(board.Id, CancellationToken.None))!).Token);
+
+        await Store.SetShareLinkAsync(board.Id, BoardRoles.Viewer, null, CancellationToken.None);
+        Assert.Empty((await Store.GetShareLinksAsync(board.Id, CancellationToken.None))!);
+        Assert.False(await Store.SetShareLinkAsync("missing", BoardRoles.Viewer, "x", CancellationToken.None));
+    }
 }
 
 public sealed class InMemoryBoardStoreTests : BoardStoreContract

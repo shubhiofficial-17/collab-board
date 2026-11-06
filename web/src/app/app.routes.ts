@@ -9,5 +9,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./board/board-page.component').then((m) => m.BoardPageComponent),
   },
+  {
+    path: 'invite/:token',
+    canActivate: [authGuard],
+    loadComponent: () => import('./sharing/invite.component').then((m) => m.InviteComponent),
+  },
   { path: '**', redirectTo: '' },
 ];
