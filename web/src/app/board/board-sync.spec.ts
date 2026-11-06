@@ -78,4 +78,17 @@ describe('BoardSync', () => {
     expect(sync.status()).toBe('rejected');
     expect(sync.hasUnsavedChanges).toBeFalse();
   });
+
+  it('sends changes left from last time first, and reports what is unsaved', () => {
+    const reported: number[] = [];
+    sync.unsavedChanged.subscribe((ops) => reported.push(ops.length));
+    sync.start('b1', changes, () => null, [del('old')]);
+
+    changes.next([del('new')]);
+    expect(api.applyOps.calls.mostRecent().args[1]).toEqual([del('old')]);
+    respond(responses.length - 1);
+
+    expect(api.applyOps.calls.mostRecent().args[1]).toEqual([del('new')]);
+    expect(reported).toEqual([1, 2, 1]);
+  });
 });

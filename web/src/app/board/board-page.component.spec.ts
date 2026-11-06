@@ -5,13 +5,17 @@ import { BoardContent } from '../boards/board';
 import { BoardsApi } from '../boards/boards-api.service';
 import { BoardPageComponent } from './board-page.component';
 import { BoardState } from './board-state';
+import { StampedOp } from './model/crdt';
 import { FakeHubConnection } from '../realtime/fake-hub-connection';
 import { HUB_CONNECTION_FACTORY } from '../realtime/realtime.service';
+import { HttpErrorResponse } from '@angular/common/http';
+import { MemoryStorage, OFFLINE_STORAGE, OfflineCache } from './offline-cache';
 
 describe('BoardPageComponent', () => {
   let api: jasmine.SpyObj<BoardsApi>;
   let fixture: ComponentFixture<BoardPageComponent>;
   let hub: FakeHubConnection;
+  let storage: MemoryStorage;
 
   const content: BoardContent = {
     id: 'b1',
@@ -29,6 +33,7 @@ describe('BoardPageComponent', () => {
         provideRouter([]),
         { provide: BoardsApi, useValue: api },
         { provide: HUB_CONNECTION_FACTORY, useValue: () => hub.asConnection() },
+        { provide: OFFLINE_STORAGE, useValue: storage },
       ],
     });
     fixture = TestBed.createComponent(BoardPageComponent);
@@ -42,6 +47,7 @@ describe('BoardPageComponent', () => {
     api = jasmine.createSpyObj<BoardsApi>('BoardsApi', ['get', 'applyOps', 'rename']);
     api.applyOps.and.returnValue(of({ version: 4 }));
     hub = new FakeHubConnection();
+    storage = new MemoryStorage();
     hub.joinResult = {
       version: 3,
       participants: [
@@ -114,4 +120,46 @@ describe('BoardPageComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain("doesn't exist");
   });
+
+  it('opens the local copy when the server cannot be reached, and keeps edits on this device', () => {
+    seedCache([]);
+    api.get.and.returnValue(throwError(() => new HttpErrorResponse({ status: 0 })));
+    api.applyOps.and.returnValue(throwError(() => new HttpErrorResponse({ status: 0 })));
+    setup();
+    fixture.detectChanges();
+
+    expect(state().shapes().has('s1')).toBeTrue();
+    expect(fixture.nativeElement.textContent).toContain('Offline copy');
+
+    state().apply([{ type: 'delete', id: 's1' }]);
+
+    expect(TestBed.inject(OfflineCache).load('b1')!.pending).toEqual([
+      jasmine.objectContaining({ type: 'delete', id: 's1' }),
+    ]);
+  });
+
+  it('sends changes made offline last time once the board loads', () => {
+    const offlineEdit = { type: 'update' as const, id: 's1', patch: { x: 50 }, ts: '0000000000001:0000:me' };
+    seedCache([offlineEdit]);
+    api.get.and.returnValue(of(content));
+    setup();
+
+    expect(state().shape('s1')!.x).toBe(50);
+    expect(api.applyOps).toHaveBeenCalledWith('b1', [offlineEdit], null);
+    expect(TestBed.inject(OfflineCache).load('b1')!.pending).toEqual([]);
+  });
+
+  it('still shows "not found" for a board that is gone, and forgets its local copy', () => {
+    seedCache([]);
+    api.get.and.returnValue(throwError(() => new HttpErrorResponse({ status: 404 })));
+    setup();
+
+    expect(fixture.nativeElement.textContent).toContain("doesn't exist");
+    expect(TestBed.inject(OfflineCache).load('b1')).toBeNull();
+  });
+
+  function seedCache(pending: StampedOp[]) {
+    const { shapes, version: _version, ...board } = content;
+    storage.setItem('collab-board/board/b1', JSON.stringify({ board, shapes, pending }));
+  }
 });

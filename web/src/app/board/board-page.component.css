@@ -114,3 +114,11 @@
   margin: 80px auto;
   text-align: center;
 }
+
+.offline-copy {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.8rem;
+}

@@ -15,8 +15,8 @@ Built with **Angular 18** (standalone components, signals), **.NET 8** (minimal 
 | 3. Persistence | Boards saved in MongoDB as operations, with optimistic concurrency; rename and delete | ✅ Done |
 | 4. Real time | Live sync between users, presence avatars and live cursors (SignalR), auto-reconnect with resync | ✅ Done |
 | 5a. Conflict-free merging | Per-field last-writer-wins with hybrid logical clocks; same result in any order | ✅ Done |
-| 5b. Offline editing | Keep editing without a connection, sync when back | ⏳ Next |
-| 6. Accounts and sharing | Sign-in, invite links, viewer and editor roles | Planned |
+| 5b. Offline editing | Boards open from a local copy without a connection; edits are kept on the device and sent when back online | ✅ Done |
+| 6. Accounts and sharing | Sign-in, invite links, viewer and editor roles | ⏳ Next |
 | 7. History | Version history and restore | Planned |
 | 8. AI | Turn a prompt into a diagram | Planned |
 | 9. Quality | End-to-end tests, load tests, deployment | Planned |
