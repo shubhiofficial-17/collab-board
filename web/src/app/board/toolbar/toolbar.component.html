@@ -1,0 +1,51 @@
+<div class="toolbar" role="toolbar" aria-label="Drawing tools">
+  <div class="group">
+    @for (t of tools; track t.tool) {
+      <button
+        type="button"
+        class="icon"
+        [class.active]="state.tool() === t.tool"
+        [attr.aria-pressed]="state.tool() === t.tool"
+        [attr.aria-label]="t.label"
+        [title]="t.label + ' (' + t.key + ')'"
+        (click)="state.tool.set(t.tool)"
+      >
+        {{ t.icon }}
+      </button>
+    }
+  </div>
+
+  <div class="group" aria-label="Colour">
+    @for (c of palette; track c) {
+      <button
+        type="button"
+        class="swatch"
+        [class.active]="state.color() === c"
+        [style.background]="c"
+        [attr.aria-label]="'Colour ' + c"
+        (click)="pickColor(c)"
+      ></button>
+    }
+  </div>
+
+  <div class="group">
+    <button type="button" class="icon" aria-label="Undo" title="Undo (Ctrl+Z)" [disabled]="!state.canUndo()" (click)="state.undo()">↶</button>
+    <button type="button" class="icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" [disabled]="!state.canRedo()" (click)="state.redo()">↷</button>
+    <button
+      type="button"
+      class="icon"
+      aria-label="Delete selection"
+      title="Delete (Del)"
+      [disabled]="state.selection().size === 0"
+      (click)="state.deleteSelection()"
+    >
+      🗑
+    </button>
+  </div>
+
+  <div class="group">
+    <button type="button" class="icon" aria-label="Zoom out" (click)="zoomBy(1 / 1.25)">−</button>
+    <button type="button" class="zoom" title="Reset view" (click)="resetView()">{{ zoomPercent() }}%</button>
+    <button type="button" class="icon" aria-label="Zoom in" (click)="zoomBy(1.25)">+</button>
+  </div>
+</div>

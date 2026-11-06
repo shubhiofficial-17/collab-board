@@ -1,12 +1,17 @@
 import { Component, OnInit, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { BoardState } from './board-state';
+import { BoardCanvasComponent } from './canvas/board-canvas.component';
+import { ToolbarComponent } from './toolbar/toolbar.component';
 import { Board } from '../boards/board';
 import { BoardsApi } from '../boards/boards-api.service';
 
 @Component({
   selector: 'app-board-page',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, BoardCanvasComponent, ToolbarComponent],
+  // One BoardState per open board.
+  providers: [BoardState],
   templateUrl: './board-page.component.html',
   styleUrl: './board-page.component.css',
 })

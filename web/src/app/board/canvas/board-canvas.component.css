@@ -1,0 +1,70 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--border) 1.2px, transparent 1.2px);
+}
+
+.shape {
+  stroke: rgba(31, 35, 40, 0.18);
+  stroke-width: 1;
+}
+
+.sticky rect {
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.12));
+}
+
+.sticky-text {
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  font-size: 15px;
+  line-height: 1.35;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #1f2328;
+}
+
+.sticky-editor {
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  font: 15px/1.35 system-ui, sans-serif;
+  background: transparent;
+  resize: none;
+  outline: none;
+}
+
+.path {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Wider invisible stroke so thin lines are easy to click. */
+.path-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+}
+
+.selection {
+  fill: none;
+  stroke: var(--accent);
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}

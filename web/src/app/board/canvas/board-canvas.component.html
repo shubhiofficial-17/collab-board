@@ -1,0 +1,85 @@
+<svg
+  #svg
+  class="canvas"
+  [style]="gridStyle()"
+  [style.cursor]="cursor()"
+  (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp()"
+  (pointercancel)="onPointerUp()"
+  (wheel)="onWheel($event)"
+  (dblclick)="onDoubleClick($event)"
+  role="application"
+  aria-label="Whiteboard"
+>
+  <g [attr.transform]="transform()">
+    @for (shape of state.ordered(); track shape.id) {
+      @switch (shape.kind) {
+        @case ('rect') {
+          <rect
+            class="shape"
+            [attr.data-id]="shape.id"
+            [attr.x]="shape.x"
+            [attr.y]="shape.y"
+            [attr.width]="shape.w"
+            [attr.height]="shape.h"
+            [attr.fill]="shape.color"
+            rx="6"
+          />
+        }
+        @case ('ellipse') {
+          <ellipse
+            class="shape"
+            [attr.data-id]="shape.id"
+            [attr.cx]="shape.x + shape.w / 2"
+            [attr.cy]="shape.y + shape.h / 2"
+            [attr.rx]="shape.w / 2"
+            [attr.ry]="shape.h / 2"
+            [attr.fill]="shape.color"
+          />
+        }
+        @case ('sticky') {
+          <g class="sticky" [attr.data-id]="shape.id">
+            <rect [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.w" [attr.height]="shape.h" [attr.fill]="shape.color" rx="4" />
+            @if (state.editingId() !== shape.id) {
+              <foreignObject [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.w" [attr.height]="shape.h">
+                <xhtml:div class="sticky-text">{{ shape.text }}</xhtml:div>
+              </foreignObject>
+            }
+          </g>
+        }
+        @case ('path') {
+          <g [attr.data-id]="shape.id" [attr.transform]="'translate(' + shape.x + ' ' + shape.y + ')'">
+            <path class="path-hit" [attr.d]="pathD(shape)" />
+            <path class="path" [attr.d]="pathD(shape)" [attr.stroke]="shape.color" />
+          </g>
+        }
+      }
+    }
+
+    @for (shape of state.selectedShapes(); track shape.id) {
+      <rect
+        class="selection"
+        [attr.x]="shape.x - 4"
+        [attr.y]="shape.y - 4"
+        [attr.width]="shape.w + 8"
+        [attr.height]="shape.h + 8"
+        [attr.stroke-width]="1.5 / state.viewport().zoom"
+      />
+    }
+
+    @if (editing(); as shape) {
+      <foreignObject [attr.x]="shape.x" [attr.y]="shape.y" [attr.width]="shape.w" [attr.height]="shape.h">
+        <xhtml:textarea
+          #editor
+          class="sticky-editor"
+          aria-label="Sticky note text"
+          [value]="shape.text ?? ''"
+          (blur)="onEditorBlur($event)"
+          (keydown)="onEditorKeydown($event)"
+          (pointerdown)="$event.stopPropagation()"
+        ></xhtml:textarea>
+      </foreignObject>
+    }
+  </g>
+</svg>

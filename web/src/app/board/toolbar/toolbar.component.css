@@ -1,0 +1,54 @@
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.group + .group {
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+.icon {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-color: transparent;
+  font-size: 16px;
+}
+
+.icon.active {
+  background: #eef2ff;
+  border-color: var(--accent);
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.swatch.active {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.zoom {
+  min-width: 56px;
+  padding: 6px 8px;
+  border-color: transparent;
+  font-variant-numeric: tabular-nums;
+}

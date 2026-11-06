@@ -11,14 +11,26 @@ Built with **Angular 18** (standalone components, signals), **.NET 8** (minimal 
 | Milestone | Scope | Status |
 |---|---|---|
 | 1. Skeleton | .NET API, Angular app, Docker Compose, CI | ✅ Done |
-| 2. Canvas | Shapes, sticky notes, freehand drawing, select and move, pan and zoom, undo/redo | ⏳ Next |
-| 3. Persistence | Boards saved in MongoDB | Planned |
+| 2. Canvas | Shapes, sticky notes, freehand drawing, select and move, pan and zoom, undo/redo | ✅ Done |
+| 3. Persistence | Boards saved in MongoDB | ⏳ Next |
 | 4. Real time | Live sync between users, presence and cursors (SignalR) | Planned |
 | 5. Conflict-free editing | CRDTs and offline editing | Planned |
 | 6. Accounts and sharing | Sign-in, invite links, viewer and editor roles | Planned |
 | 7. History | Version history and restore | Planned |
 | 8. AI | Turn a prompt into a diagram | Planned |
 | 9. Quality | End-to-end tests, load tests, deployment | Planned |
+
+## Using the board
+
+| Action | How |
+|---|---|
+| Tools | Toolbar, or keys: **V** select, **H** pan, **R** rectangle, **O** ellipse, **S** sticky note, **P** pen |
+| Edit a sticky note | Double-click it. **Ctrl+Enter** saves, **Esc** cancels |
+| Move | Drag a shape; **Shift+click** to select several |
+| Delete | **Delete** or **Backspace** |
+| Undo / redo | **Ctrl+Z** / **Ctrl+Shift+Z** (or **Ctrl+Y**) |
+| Pan | Scroll, drag with **Space** held, middle mouse button, or the pan tool |
+| Zoom | **Ctrl+scroll** or pinch, or the toolbar |
 
 ## Run it
 

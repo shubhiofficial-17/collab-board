@@ -9,6 +9,9 @@
       <a routerLink="/" class="back" aria-label="Back to boards">←</a>
       <h1>{{ board()?.title ?? 'Loading…' }}</h1>
     </header>
-    <section class="canvas-area" aria-label="Board canvas"></section>
+    <section class="canvas-area">
+      <app-board-canvas />
+      <app-toolbar class="floating-toolbar" />
+    </section>
   </div>
 }
