@@ -1,6 +1,6 @@
 <main class="sign-in">
   <h1>Collab Board</h1>
-  <form (ngSubmit)="submit()" aria-label="{{ mode() === 'signin' ? 'Sign in' : 'Create account' }}">
+  <form (ngSubmit)="submit()" [attr.aria-label]="mode() === 'signin' ? 'Sign in' : 'Create account'">
     <h2>{{ mode() === 'signin' ? 'Sign in' : 'Create an account' }}</h2>
 
     <label>

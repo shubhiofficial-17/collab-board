@@ -132,6 +132,7 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
         Assert.Equal(HttpStatusCode.NotFound, (await bob.Client.DeleteAsync($"/api/boards/{board.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await bob.Client.PostAsJsonAsync($"/api/boards/{board.Id}/ops", new { ops = Array.Empty<object>() })).StatusCode);
-        Assert.DoesNotContain(await bob.Client.GetFromJsonAsync<List<Board>>("/api/boards"))!, b => b.Id == board.Id);
+        var bobsBoards = await bob.Client.GetFromJsonAsync<List<Board>>("/api/boards");
+        Assert.DoesNotContain(bobsBoards!, b => b.Id == board.Id);
     }
 }
