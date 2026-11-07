@@ -27,8 +27,10 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
         Assert.Equal("Sprint retro", board!.Title);
         Assert.Equal($"/api/boards/{board.Id}", created.Headers.Location!.ToString());
 
-        var fetched = await client.GetFromJsonAsync<Board>($"/api/boards/{board.Id}");
-        Assert.Equal(board, fetched);
+        var fetched = await client.GetFromJsonAsync<BoardContent>($"/api/boards/{board.Id}");
+        Assert.Equal(board.Title, fetched!.Title);
+        Assert.Empty(fetched.Shapes);
+        Assert.Equal(0, fetched.Version);
 
         var all = await client.GetFromJsonAsync<List<Board>>("/api/boards");
         Assert.Contains(all!, b => b.Id == board.Id);
@@ -65,5 +67,56 @@ public sealed class BoardApiTests(WebApplicationFactory<Program> factory) : ICla
 
         Assert.All(ids, id => Assert.Matches("^[a-km-np-z2-9]{12}$", id));
         Assert.Equal(ids.Count, ids.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task Saved_operations_come_back_when_the_board_is_opened()
+    {
+        var client = factory.CreateClient();
+        var board = (await (await client.PostAsJsonAsync("/api/boards", new { title = "Ops" })).Content.ReadFromJsonAsync<Board>())!;
+
+        var save = await client.PostAsJsonAsync($"/api/boards/{board.Id}/ops", new
+        {
+            ops = new object[]
+            {
+                new { type = "add", shape = new { id = "n1", kind = "sticky", x = 10, y = 20, w = 180, h = 140, color = "#fde68a", z = 1, text = "Hello" } },
+                new { type = "update", id = "n1", patch = new { x = 15 } },
+            },
+        });
+
+        Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        var content = await client.GetFromJsonAsync<BoardContent>($"/api/boards/{board.Id}");
+        var note = Assert.Single(content!.Shapes);
+        Assert.Equal(15, note.X);
+        Assert.Equal("Hello", note.Text);
+        Assert.Equal(1, content.Version);
+    }
+
+    [Fact]
+    public async Task Invalid_operations_get_a_400_problem()
+    {
+        var client = factory.CreateClient();
+        var board = (await (await client.PostAsJsonAsync("/api/boards", new { })).Content.ReadFromJsonAsync<Board>())!;
+
+        var response = await client.PostAsJsonAsync($"/api/boards/{board.Id}/ops", new
+        {
+            ops = new object[] { new { type = "add", shape = new { id = "x", kind = "hexagon", x = 0, y = 0, w = 1, h = 1, color = "#ffffff", z = 1 } } },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("hexagon", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Boards_can_be_renamed_and_deleted()
+    {
+        var client = factory.CreateClient();
+        var board = (await (await client.PostAsJsonAsync("/api/boards", new { title = "Draft" })).Content.ReadFromJsonAsync<Board>())!;
+
+        var renamed = await client.PatchAsJsonAsync($"/api/boards/{board.Id}", new { title = "Final" });
+        Assert.Equal("Final", (await renamed.Content.ReadFromJsonAsync<Board>())!.Title);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/boards/{board.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/boards/{board.Id}")).StatusCode);
     }
 }

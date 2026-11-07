@@ -1,4 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
+import { Observable, Subject } from 'rxjs';
 import { Op, applyOps, diff } from './model/ops';
 import { PALETTE, Shape, ShapeMap } from './model/shapes';
 import { Viewport } from './model/viewport';
@@ -25,6 +26,14 @@ export class BoardState {
   private readonly _undo = signal<HistoryEntry[]>([]);
   private readonly _redo = signal<HistoryEntry[]>([]);
   private gesture: { before: ShapeMap; touched: Set<string> } | null = null;
+  private readonly _committed = new Subject<Op[]>();
+
+  /**
+   * Every finished change, as the operations that make it: a new action, an undo or a redo.
+   * Live updates during a gesture are not included, only the gesture's net result when it ends.
+   * This is what gets saved to the server (and, later, sent to other users).
+   */
+  readonly committed: Observable<Op[]> = this._committed.asObservable();
 
   readonly shapes = this._shapes.asReadonly();
   /** Shapes in drawing order, bottom first. */
@@ -37,6 +46,15 @@ export class BoardState {
   readonly editingId = signal<string | null>(null);
   readonly canUndo = computed(() => this._undo().length > 0);
   readonly canRedo = computed(() => this._redo().length > 0);
+
+  /** Replaces the board's contents, e.g. after loading it. Clears undo history. */
+  load(shapes: readonly Shape[]): void {
+    this._shapes.set(new Map(shapes.map((s) => [s.id, s])));
+    this._undo.set([]);
+    this._redo.set([]);
+    this.selection.set(new Set());
+    this.gesture = null;
+  }
 
   /** z for a new shape, so it lands on top. */
   nextZ(): number {
@@ -101,6 +119,7 @@ export class BoardState {
     this._redo.update((stack) => [...stack, entry]);
     this._shapes.set(applyOps(this._shapes(), entry.inverse));
     this.dropMissingFromSelection();
+    this._committed.next(entry.inverse);
   }
 
   redo(): void {
@@ -113,6 +132,7 @@ export class BoardState {
     this._undo.update((stack) => [...stack, entry]);
     this._shapes.set(applyOps(this._shapes(), entry.forward));
     this.dropMissingFromSelection();
+    this._committed.next(entry.forward);
   }
 
   select(ids: Iterable<string>): void {
@@ -146,6 +166,7 @@ export class BoardState {
 
     this._undo.update((stack) => [...stack, { forward, inverse }].slice(-MAX_HISTORY));
     this._redo.set([]);
+    this._committed.next(forward);
   }
 
   private dropMissingFromSelection(): void {
