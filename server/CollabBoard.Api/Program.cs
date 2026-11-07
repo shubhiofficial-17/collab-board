@@ -1,5 +1,6 @@
 using CollabBoard.Api.Accounts;
 using CollabBoard.Api.Boards;
+using CollabBoard.Api.History;
 using CollabBoard.Api.Realtime;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
@@ -21,12 +22,14 @@ if (!string.IsNullOrWhiteSpace(mongo))
     builder.Services.AddSingleton(sp => sp.GetRequiredService<IMongoClient>().GetDatabase(url.DatabaseName ?? "collab"));
     builder.Services.AddSingleton<IBoardStore, MongoBoardStore>();
     builder.Services.AddSingleton<IUserStore, MongoUserStore>();
+    builder.Services.AddSingleton<IVersionStore, MongoVersionStore>();
     builder.Services.AddHostedService<MongoIndexInitializer>();
 }
 else
 {
     builder.Services.AddSingleton<IBoardStore, InMemoryBoardStore>();
     builder.Services.AddSingleton<IUserStore, InMemoryUserStore>();
+    builder.Services.AddSingleton<IVersionStore, InMemoryVersionStore>();
 }
 
 // Accounts: a session cookie. API calls get 401/403 instead of the default redirect to a login page.
@@ -70,6 +73,7 @@ if (!string.IsNullOrWhiteSpace(redis))
 
 builder.Services.AddSingleton<PresenceTracker>();
 builder.Services.AddSingleton<BoardChanges>();
+builder.Services.AddSingleton<BoardHistory>();
 
 var app = builder.Build();
 
@@ -81,6 +85,7 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 app.MapAccountEndpoints();
 app.MapBoardEndpoints();
 app.MapSharingEndpoints();
+app.MapHistoryEndpoints();
 app.MapHub<BoardHub>(BoardHub.Path);
 
 app.Run();

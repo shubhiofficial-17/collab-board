@@ -17,6 +17,22 @@ export interface BoardMember {
   role: BoardRole;
 }
 
+/** A saved copy of a board. Automatic versions have no name. */
+export interface VersionSummary {
+  id: string;
+  name: string | null;
+  createdAt: string;
+  createdByName: string | null;
+  shapeCount: number;
+}
+
+export interface VersionDetail {
+  id: string;
+  name: string | null;
+  createdAt: string;
+  shapes: Shape[];
+}
+
 /** Roles that can be given through a link or changed by the owner. */
 export type ShareRole = 'editor' | 'viewer';
 

@@ -1,0 +1,50 @@
+<aside class="panel" aria-labelledby="history-title" (keydown.escape)="closed.emit()">
+  <header>
+    <h2 id="history-title">History</h2>
+    <button type="button" class="close" aria-label="Close history" (click)="closed.emit()">×</button>
+  </header>
+
+  @if (canEdit()) {
+    <form class="save" (ngSubmit)="save()">
+      <input name="name" [(ngModel)]="name" maxlength="80" placeholder="Name this version" aria-label="Version name" />
+      <button type="submit" [disabled]="busy() || !name.trim()">Save</button>
+    </form>
+  }
+
+  @if (selected(); as version) {
+    <section class="preview">
+      <div class="thumb"><app-shape-preview [shapes]="version.shapes" /></div>
+      <p>
+        <strong>{{ label(version) }}</strong>
+        <span class="muted">{{ version.createdAt | date: 'medium' }} · {{ version.shapes.length }} shapes</span>
+      </p>
+      <div class="actions">
+        @if (canEdit()) {
+          <button type="button" class="primary" [disabled]="busy()" (click)="restore()">Restore this version</button>
+        }
+        <button type="button" (click)="selected.set(null)">Back</button>
+      </div>
+      <p class="muted hint">Restoring saves the current board as a version first, so it can be undone.</p>
+    </section>
+  }
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  <ul class="versions">
+    @for (version of versions() ?? []; track version.id) {
+      <li>
+        <button type="button" [class.current]="selected()?.id === version.id" (click)="open(version)">
+          <span class="name" [class.auto]="!version.name">{{ label(version) }}</span>
+          <span class="muted">
+            {{ version.createdAt | date: 'MMM d, HH:mm' }}
+            @if (version.createdByName) { · {{ version.createdByName }} }
+          </span>
+        </button>
+      </li>
+    } @empty {
+      <li class="muted">{{ versions() ? 'No versions yet. They appear as the board is edited.' : 'Loading…' }}</li>
+    }
+  </ul>
+</aside>
