@@ -5,11 +5,15 @@ import { Shape, ShapeMap } from './shapes';
  * are built on these: an operation can be applied, inverted and sent over the network.
  */
 export type Op =
-  | { type: 'add'; shape: Shape }
-  | { type: 'update'; id: string; patch: Partial<Omit<Shape, 'id' | 'kind'>> }
-  | { type: 'delete'; id: string };
+  | { type: 'add'; shape: Shape; ts?: string }
+  | { type: 'update'; id: string; patch: Partial<Omit<Shape, 'id' | 'kind'>>; ts?: string }
+  | { type: 'delete'; id: string; ts?: string };
 
-/** Applies operations without mutating the input. Operations on missing shapes are ignored. */
+/**
+ * Applies operations directly, without merge rules, and without mutating the input. Used for live
+ * previews during a gesture and in tests; real changes go through the timestamped merge in crdt.ts.
+ * Operations on missing shapes are ignored.
+ */
 export function applyOps(shapes: ShapeMap, ops: readonly Op[]): ShapeMap {
   if (ops.length === 0) {
     return shapes;
@@ -66,7 +70,7 @@ function changedFields(was: Shape, now: Shape): Partial<Shape> | null {
   let changed = false;
   const keys = new Set([...Object.keys(was), ...Object.keys(now)]) as Set<keyof Shape>;
   for (const key of keys) {
-    if (key === 'id' || key === 'kind') {
+    if (key === 'id' || key === 'kind' || key === 'clock' || key === 'deleted') {
       continue;
     }
 

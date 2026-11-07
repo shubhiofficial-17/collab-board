@@ -1,7 +1,9 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
+import { HybridClock } from './model/clock';
+import { StampedOp, mergeOp, visibleShapes } from './model/crdt';
 import { Op, applyOps, diff } from './model/ops';
-import { PALETTE, Shape, ShapeMap } from './model/shapes';
+import { PALETTE, Shape, ShapeMap, newId } from './model/shapes';
 import { Viewport } from './model/viewport';
 
 export type Tool = 'select' | 'hand' | 'rect' | 'ellipse' | 'sticky' | 'pen';
@@ -22,22 +24,27 @@ const MAX_HISTORY = 200;
  */
 @Injectable()
 export class BoardState {
-  private readonly _shapes = signal<ShapeMap>(new Map());
+  /** Every shape this client knows about, including deleted ones (tombstones) and their clocks. */
+  private readonly _all = signal<ShapeMap>(new Map());
+  private readonly clock = new HybridClock(newId());
   private readonly _undo = signal<HistoryEntry[]>([]);
   private readonly _redo = signal<HistoryEntry[]>([]);
   private gesture: { before: ShapeMap; touched: Set<string> } | null = null;
-  private readonly _committed = new Subject<Op[]>();
+  private readonly _committed = new Subject<StampedOp[]>();
 
   /**
    * Every finished change, as the operations that make it: a new action, an undo or a redo.
    * Live updates during a gesture are not included, only the gesture's net result when it ends.
    * This is what gets saved to the server (and, later, sent to other users).
    */
-  readonly committed: Observable<Op[]> = this._committed.asObservable();
+  readonly committed: Observable<StampedOp[]> = this._committed.asObservable();
 
-  readonly shapes = this._shapes.asReadonly();
-  /** Shapes in drawing order, bottom first. */
-  readonly ordered = computed(() => [...this._shapes().values()].sort((a, b) => a.z - b.z));
+  /** The shapes on the board (deleted ones excluded). */
+  readonly shapes = computed(() => visibleShapes(this._all()));
+  /** Shapes in drawing order, bottom first. Ties (possible after concurrent edits) go by id. */
+  readonly ordered = computed(() =>
+    [...this.shapes().values()].sort((a, b) => a.z - b.z || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+  );
   readonly selection = signal<ReadonlySet<string>>(new Set());
   readonly selectedShapes = computed(() => this.ordered().filter((s) => this.selection().has(s.id)));
   readonly tool = signal<Tool>('select');
@@ -49,7 +56,8 @@ export class BoardState {
 
   /** Replaces the board's contents, e.g. after loading it. Clears undo history. */
   load(shapes: readonly Shape[]): void {
-    this._shapes.set(new Map(shapes.map((s) => [s.id, s])));
+    this._all.set(new Map(shapes.map((s) => [s.id, s])));
+    this.observeClocks(shapes);
     this._undo.set([]);
     this._redo.set([]);
     this.selection.set(new Set());
@@ -61,10 +69,18 @@ export class BoardState {
    * reverts your own changes, as in most collaborative editors.
    */
   applyRemote(ops: readonly Op[]): void {
-    this._shapes.set(applyOps(this._shapes(), ops));
+    const next = new Map(this._all());
+    for (const op of ops) {
+      if (op.ts) {
+        this.clock.observe(op.ts);
+        mergeOp(next, op as StampedOp);
+      }
+    }
+
+    this._all.set(next);
     this.dropMissingFromSelection();
     const editing = this.editingId();
-    if (editing && !this._shapes().has(editing)) {
+    if (editing && !this.shapes().has(editing)) {
       this.editingId.set(null);
     }
   }
@@ -73,15 +89,21 @@ export class BoardState {
    * Replaces the shapes with the server's copy (after reconnecting) and re-applies this user's changes
    * that haven't been saved yet, so they don't flicker away. Undo history is kept.
    */
-  resync(serverShapes: readonly Shape[], unsaved: readonly Op[]): void {
-    this._shapes.set(applyOps(new Map(serverShapes.map((s) => [s.id, s])), unsaved));
+  resync(serverShapes: readonly Shape[], unsaved: readonly StampedOp[]): void {
+    const next = new Map(serverShapes.map((s) => [s.id, s]));
+    for (const op of unsaved) {
+      mergeOp(next, op); // harmless if the server already has it: merging is idempotent
+    }
+
+    this.observeClocks(serverShapes);
+    this._all.set(next);
     this.dropMissingFromSelection();
   }
 
   /** z for a new shape, so it lands on top. */
   nextZ(): number {
     let max = 0;
-    for (const shape of this._shapes().values()) {
+    for (const shape of this.shapes().values()) {
       max = Math.max(max, shape.z);
     }
 
@@ -94,15 +116,14 @@ export class BoardState {
       return;
     }
 
-    const before = this._shapes();
+    const before = this.shapes();
     const after = applyOps(before, ops);
     const ids = new Set(ops.map((op) => (op.type === 'add' ? op.shape.id : op.id)));
     this.record(diff(before, after, ids), diff(after, before, ids));
-    this._shapes.set(after);
   }
 
   beginGesture(): void {
-    this.gesture = { before: this._shapes(), touched: new Set() };
+    this.gesture = { before: this.shapes(), touched: new Set() };
   }
 
   /** Applies operations live during a gesture, without creating undo steps. */
@@ -116,7 +137,8 @@ export class BoardState {
       this.gesture.touched.add(op.type === 'add' ? op.shape.id : op.id);
     }
 
-    this._shapes.set(applyOps(this._shapes(), ops));
+    // A preview only: no timestamps yet. The gesture's net result is stamped when it ends.
+    this._all.set(applyOps(this._all(), ops));
   }
 
   /** Ends the gesture, recording everything it changed as one undo step. */
@@ -127,7 +149,7 @@ export class BoardState {
 
     const { before, touched } = this.gesture;
     this.gesture = null;
-    const after = this._shapes();
+    const after = this.shapes();
     this.record(diff(before, after, touched), diff(after, before, touched));
   }
 
@@ -139,9 +161,7 @@ export class BoardState {
 
     this._undo.update((stack) => stack.slice(0, -1));
     this._redo.update((stack) => [...stack, entry]);
-    this._shapes.set(applyOps(this._shapes(), entry.inverse));
-    this.dropMissingFromSelection();
-    this._committed.next(entry.inverse);
+    this.commit(entry.inverse);
   }
 
   redo(): void {
@@ -152,9 +172,7 @@ export class BoardState {
 
     this._redo.update((stack) => stack.slice(0, -1));
     this._undo.update((stack) => [...stack, entry]);
-    this._shapes.set(applyOps(this._shapes(), entry.forward));
-    this.dropMissingFromSelection();
-    this._committed.next(entry.forward);
+    this.commit(entry.forward);
   }
 
   select(ids: Iterable<string>): void {
@@ -178,7 +196,7 @@ export class BoardState {
   }
 
   shape(id: string): Shape | undefined {
-    return this._shapes().get(id);
+    return this.shapes().get(id);
   }
 
   private record(forward: Op[], inverse: Op[]): void {
@@ -188,14 +206,48 @@ export class BoardState {
 
     this._undo.update((stack) => [...stack, { forward, inverse }].slice(-MAX_HISTORY));
     this._redo.set([]);
-    this._committed.next(forward);
+    this.commit(forward);
+  }
+
+  /**
+   * Timestamps local operations, merges them into the board and announces them. Undo and redo come
+   * through here too, so undoing is just a new, later change; it doesn't rewrite anyone's history.
+   */
+  private commit(ops: readonly Op[]): void {
+    const stamped = ops.map((op) => stamp(op, this.clock.tick()));
+    const next = new Map(this._all());
+    for (const op of stamped) {
+      mergeOp(next, op);
+    }
+
+    this._all.set(next);
+    this.dropMissingFromSelection();
+    this._committed.next(stamped);
+  }
+
+  private observeClocks(shapes: readonly Shape[]): void {
+    for (const shape of shapes) {
+      for (const ts of Object.values(shape.clock ?? {})) {
+        this.clock.observe(ts);
+      }
+    }
   }
 
   private dropMissingFromSelection(): void {
-    const shapes = this._shapes();
+    const shapes = this.shapes();
     const kept = [...this.selection()].filter((id) => shapes.has(id));
     if (kept.length !== this.selection().size) {
       this.selection.set(new Set(kept));
     }
   }
+}
+
+/** Gives an operation its timestamp, and drops merge bookkeeping that diff may have copied into it. */
+function stamp(op: Op, ts: string): StampedOp {
+  if (op.type === 'add') {
+    const { clock: _clock, deleted: _deleted, ...shape } = op.shape;
+    return { type: 'add', shape: shape as Shape, ts };
+  }
+
+  return { ...op, ts } as StampedOp;
 }

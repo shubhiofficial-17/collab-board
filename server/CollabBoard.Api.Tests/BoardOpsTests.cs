@@ -7,8 +7,12 @@ public sealed class BoardOpsTests
 {
     private static Shape Rect(string id, double x = 0) => new() { Id = id, Kind = "rect", X = x, W = 10, H = 10, Color = "#fde68a", Z = 1 };
 
-    private static BoardOp Update(string id, string patchJson) =>
-        new() { Type = "update", Id = id, Patch = JsonDocument.Parse(patchJson).RootElement };
+    private static BoardOp Update(string id, string patchJson, string? ts = null) =>
+        new() { Type = "update", Id = id, Patch = JsonDocument.Parse(patchJson).RootElement, Ts = ts };
+
+    private static string Ts(long n, string client = "a") => new HybridTimestamp(n, 0, client).ToString();
+
+    private static List<string> Visible(List<Shape> shapes) => shapes.Where(BoardOps.IsVisible).Select(s => s.Id).ToList();
 
     [Fact]
     public void Adds_updates_and_deletes()
@@ -22,20 +26,108 @@ public sealed class BoardOpsTests
             new BoardOp { Type = "delete", Id = "b" },
         ]);
 
-        Assert.Equal(["a", "c"], shapes.Select(s => s.Id));
+        Assert.Equal(["a", "c"], Visible(shapes));
+        Assert.True(shapes.Single(s => s.Id == "b").Deleted); // kept as a tombstone
         Assert.Equal(50, shapes[0].X);
         Assert.Equal("#bfdbfe", shapes[0].Color);
         Assert.Equal("hi", shapes[0].Text);
     }
 
     [Fact]
-    public void Operations_on_shapes_that_are_gone_are_skipped()
+    public void Operations_on_unknown_shapes_leave_hidden_placeholders()
     {
         var shapes = new List<Shape> { Rect("a") };
 
         BoardOps.Apply(shapes, [Update("ghost", """{"x": 1}"""), new BoardOp { Type = "delete", Id = "ghost" }]);
 
-        Assert.Single(shapes);
+        Assert.Equal(["a"], Visible(shapes));
+    }
+
+    [Fact]
+    public void Each_field_keeps_its_newest_value()
+    {
+        var shapes = new List<Shape>();
+
+        BoardOps.Apply(shapes,
+        [
+            new BoardOp { Type = "add", Shape = Rect("a"), Ts = Ts(1) },
+            Update("a", """{"x": 5}""", Ts(3)),
+            Update("a", """{"x": 9, "color": "#ffffff"}""", Ts(2, "b")),
+        ], DateTimeOffset.FromUnixTimeMilliseconds(0));
+
+        var a = Assert.Single(shapes);
+        Assert.Equal(5, a.X);
+        Assert.Equal("#ffffff", a.Color);
+    }
+
+    [Fact]
+    public void An_older_add_does_not_undo_a_newer_delete()
+    {
+        var shapes = new List<Shape>();
+
+        BoardOps.Apply(shapes,
+        [
+            new BoardOp { Type = "delete", Id = "a", Ts = Ts(2) },
+            new BoardOp { Type = "add", Shape = Rect("a"), Ts = Ts(1) },
+        ], DateTimeOffset.FromUnixTimeMilliseconds(0));
+
+        Assert.Empty(Visible(shapes));
+    }
+
+    [Fact]
+    public void Converges_whatever_order_changes_arrive_in()
+    {
+        var random = new Random(7);
+        for (var round = 0; round < 30; round++)
+        {
+            var ops = new List<BoardOp>();
+            for (var i = 0; i < 40; i++)
+            {
+                var id = $"s{random.Next(4)}";
+                var ts = $"{Ts(random.Next(20), "abc"[random.Next(3)].ToString())}{i}";
+                ops.Add(random.NextDouble() switch
+                {
+                    < 0.3 => new BoardOp { Type = "add", Shape = Rect(id, random.Next(100)), Ts = ts },
+                    < 0.8 => Update(id, $$"""{"x": {{random.Next(100)}}}""", ts),
+                    _ => new BoardOp { Type = "delete", Id = id, Ts = ts },
+                });
+            }
+
+            var expected = Snapshot(ops);
+            for (var shuffle = 0; shuffle < 5; shuffle++)
+            {
+                Assert.Equal(expected, Snapshot(ops.OrderBy(_ => random.Next()).ToList()));
+            }
+        }
+
+        static string Snapshot(List<BoardOp> ops)
+        {
+            var shapes = new List<Shape>();
+            foreach (var op in ops)
+            {
+                BoardOps.Apply(shapes, [op], DateTimeOffset.FromUnixTimeMilliseconds(0));
+            }
+
+            return string.Join(";", shapes.Where(BoardOps.IsVisible).OrderBy(s => s.Id).Select(s => $"{s.Id},{s.X},{s.Color}"));
+        }
+    }
+
+    [Fact]
+    public void Operations_without_a_timestamp_get_one()
+    {
+        var op = new BoardOp { Type = "add", Shape = Rect("a") };
+
+        BoardOps.Apply([], [op]);
+
+        Assert.NotNull(HybridTimestamp.Parse(op.Ts!));
+    }
+
+    [Theory]
+    [InlineData("nonsense")]
+    [InlineData("9999999999999:0000:a")]
+    public void Bad_or_far_future_timestamps_are_rejected(string ts)
+    {
+        Assert.Throws<BoardOpException>(() => BoardOps.Apply([], [new BoardOp { Type = "add", Shape = Rect("a"), Ts = ts }]));
     }
 
     [Fact]

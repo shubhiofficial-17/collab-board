@@ -19,6 +19,10 @@ export interface Shape {
   text?: string;
   /** Path only: flat list of x, y pairs relative to (x, y). */
   points?: number[];
+  /** Deleted shapes are kept as hidden tombstones so deletes merge correctly (see crdt.ts). */
+  deleted?: boolean;
+  /** Timestamp of the last write to each field (see crdt.ts). Not part of what the user edits. */
+  clock?: Record<string, string>;
 }
 
 export type ShapeMap = ReadonlyMap<string, Shape>;
