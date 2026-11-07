@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { Board } from '../boards/board';
 import { BoardsApi } from '../boards/boards-api.service';
+import { AuthService } from '../auth/auth.service';
 import { loadIdentity } from '../realtime/identity';
 import { RealtimeService } from '../realtime/realtime.service';
 import { StampedOp } from './model/crdt';
@@ -27,6 +28,7 @@ export class BoardPageComponent implements OnInit {
   private readonly api = inject(BoardsApi);
   private readonly state = inject(BoardState);
   private readonly cache = inject(OfflineCache);
+  private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
   readonly sync = inject(BoardSync);
   readonly realtime = inject(RealtimeService);
@@ -99,7 +101,8 @@ export class BoardPageComponent implements OnInit {
       .subscribe((unsaved) => this.cache.savePending(board.id, unsaved));
     this.sync.start(board.id, this.state.committed, () => this.realtime.connectionId, pending);
     this.loaded.set(true);
-    void this.realtime.connect(board.id, loadIdentity(), {
+    const identity = loadIdentity();
+    void this.realtime.connect(board.id, { ...identity, name: this.auth.me()?.name ?? identity.name }, {
       onOps: (message) => this.state.applyRemote(message.ops),
       onResync: () => this.resync(),
     });

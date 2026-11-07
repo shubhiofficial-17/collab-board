@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Board } from '../boards/board';
 import { BoardsApi } from '../boards/boards-api.service';
+import { AuthService } from '../auth/auth.service';
 
 @Component({
   selector: 'app-home',
@@ -15,6 +16,7 @@ import { BoardsApi } from '../boards/boards-api.service';
 export class HomeComponent implements OnInit {
   private readonly api = inject(BoardsApi);
   private readonly router = inject(Router);
+  readonly auth = inject(AuthService);
 
   readonly boards = signal<Board[]>([]);
   readonly loading = signal(true);
@@ -33,6 +35,10 @@ export class HomeComponent implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  signOut(): void {
+    this.auth.signOut().subscribe({ complete: () => void this.router.navigate(['/sign-in']) });
   }
 
   create(): void {

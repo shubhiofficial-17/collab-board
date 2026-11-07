@@ -10,5 +10,7 @@ WORKDIR /app
 COPY --from=build /app .
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
+# Created here so a volume mounted on it is writable by the app user.
+RUN mkdir -p /keys && chown app /keys
 USER app
 ENTRYPOINT ["dotnet", "CollabBoard.Api.dll"]

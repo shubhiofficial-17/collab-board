@@ -1,5 +1,11 @@
 <main class="home">
   <header>
+    @if (auth.me(); as me) {
+      <p class="account">
+        Signed in as <strong>{{ me.name }}</strong>
+        <button type="button" class="link" (click)="signOut()">Sign out</button>
+      </p>
+    }
     <h1>Collab Board</h1>
     <p class="tagline">Draw, plan and brainstorm together in real time.</p>
   </header>

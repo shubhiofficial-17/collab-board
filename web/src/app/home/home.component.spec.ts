@@ -1,5 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { AuthService } from '../auth/auth.service';
+import { MemoryStorage, OFFLINE_STORAGE } from '../board/offline-cache';
 import { of, throwError } from 'rxjs';
 import { BoardsApi } from '../boards/boards-api.service';
 import { HomeComponent } from './home.component';
@@ -11,7 +15,13 @@ describe('HomeComponent', () => {
   function setup() {
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [provideRouter([]), { provide: BoardsApi, useValue: api }],
+      providers: [
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: OFFLINE_STORAGE, useValue: new MemoryStorage() },
+        { provide: BoardsApi, useValue: api },
+      ],
     });
     fixture = TestBed.createComponent(HomeComponent);
     fixture.detectChanges();
@@ -26,6 +36,15 @@ describe('HomeComponent', () => {
     setup();
 
     expect(fixture.nativeElement.textContent).toContain('Roadmap');
+  });
+
+  it('shows who is signed in', () => {
+    api.list.and.returnValue(of([]));
+    setup();
+    TestBed.inject(AuthService).me.set({ id: 'u1', email: 'ada@example.com', name: 'Ada' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.account').textContent).toContain('Ada');
   });
 
   it('shows an empty state', () => {

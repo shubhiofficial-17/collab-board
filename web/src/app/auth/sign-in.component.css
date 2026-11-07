@@ -1,0 +1,41 @@
+.sign-in {
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 64px 20px;
+}
+
+h1 {
+  margin: 0 0 24px;
+  font-size: 1.8rem;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.switch {
+  color: var(--muted);
+}

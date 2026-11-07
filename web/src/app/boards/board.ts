@@ -6,6 +6,15 @@ export interface Board {
   title: string;
   createdAt: string;
   updatedAt: string;
+  /** Who has access; the creator is the owner. */
+  members?: BoardMember[];
+}
+
+export type BoardRole = 'owner' | 'editor' | 'viewer';
+
+export interface BoardMember {
+  userId: string;
+  role: BoardRole;
 }
 
 /** A board with everything on it. */

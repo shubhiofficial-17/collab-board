@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { of, throwError } from 'rxjs';
 import { BoardContent } from '../boards/board';
 import { BoardsApi } from '../boards/boards-api.service';
@@ -31,6 +33,8 @@ describe('BoardPageComponent', () => {
       imports: [BoardPageComponent],
       providers: [
         provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
         { provide: BoardsApi, useValue: api },
         { provide: HUB_CONNECTION_FACTORY, useValue: () => hub.asConnection() },
         { provide: OFFLINE_STORAGE, useValue: storage },

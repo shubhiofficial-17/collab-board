@@ -18,7 +18,7 @@ public abstract class BoardStoreContract
     [Fact]
     public async Task Saves_shapes_and_bumps_the_version()
     {
-        var board = await Store.CreateAsync("Plan", CancellationToken.None);
+        var board = await Store.CreateAsync("Plan", "owner1", CancellationToken.None);
 
         var first = await Store.ApplyOpsAsync(board.Id, [Add("a"), Add("b")], CancellationToken.None);
         var second = await Store.ApplyOpsAsync(board.Id,
@@ -37,7 +37,7 @@ public abstract class BoardStoreContract
     [Fact]
     public async Task An_invalid_batch_changes_nothing()
     {
-        var board = await Store.CreateAsync("Plan", CancellationToken.None);
+        var board = await Store.CreateAsync("Plan", "owner1", CancellationToken.None);
         await Store.ApplyOpsAsync(board.Id, [Add("a")], CancellationToken.None);
 
         await Assert.ThrowsAsync<BoardOpException>(() => Store.ApplyOpsAsync(board.Id,
@@ -51,7 +51,7 @@ public abstract class BoardStoreContract
     [Fact]
     public async Task Concurrent_writers_do_not_lose_each_others_changes()
     {
-        var board = await Store.CreateAsync("Busy", CancellationToken.None);
+        var board = await Store.CreateAsync("Busy", "owner1", CancellationToken.None);
 
         await Task.WhenAll(Enumerable.Range(0, 10)
             .Select(i => Store.ApplyOpsAsync(board.Id, [Add($"s{i}")], CancellationToken.None)));
@@ -64,16 +64,36 @@ public abstract class BoardStoreContract
     [Fact]
     public async Task Renames_lists_and_deletes()
     {
-        var board = await Store.CreateAsync("Old", CancellationToken.None);
+        var board = await Store.CreateAsync("Old", "owner1", CancellationToken.None);
 
         var renamed = await Store.RenameAsync(board.Id, "New", CancellationToken.None);
         Assert.Equal("New", renamed!.Title);
-        Assert.Contains(await Store.ListAsync(CancellationToken.None), b => b.Id == board.Id && b.Title == "New");
+        Assert.Contains(await Store.ListAsync("owner1", CancellationToken.None), b => b.Id == board.Id && b.Title == "New");
 
         Assert.True(await Store.DeleteAsync(board.Id, CancellationToken.None));
         Assert.Null(await Store.GetAsync(board.Id, CancellationToken.None));
         Assert.False(await Store.DeleteAsync(board.Id, CancellationToken.None));
         Assert.Null(await Store.ApplyOpsAsync(board.Id, [Add("x")], CancellationToken.None));
+        Assert.False(await Store.SetMemberAsync(board.Id, new BoardMember("u", BoardRoles.Viewer), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Members_can_be_added_changed_and_removed()
+    {
+        var board = await Store.CreateAsync("Shared", "owner1", CancellationToken.None);
+
+        Assert.True(await Store.SetMemberAsync(board.Id, new BoardMember("u2", BoardRoles.Viewer), CancellationToken.None));
+        Assert.True(await Store.SetMemberAsync(board.Id, new BoardMember("u2", BoardRoles.Editor), CancellationToken.None));
+        var members = await Store.GetMembersAsync(board.Id, CancellationToken.None);
+        Assert.Equal(BoardRoles.Owner, BoardRoles.RoleOf(members, "owner1"));
+        Assert.Equal(BoardRoles.Editor, BoardRoles.RoleOf(members, "u2"));
+        Assert.Equal(2, members!.Count);
+        Assert.Contains(await Store.ListAsync("u2", CancellationToken.None), b => b.Id == board.Id);
+        Assert.DoesNotContain(await Store.ListAsync("stranger", CancellationToken.None), b => b.Id == board.Id);
+
+        Assert.True(await Store.RemoveMemberAsync(board.Id, "u2", CancellationToken.None));
+        Assert.Null(BoardRoles.RoleOf(await Store.GetMembersAsync(board.Id, CancellationToken.None), "u2"));
+        Assert.Null(await Store.GetMembersAsync("missing", CancellationToken.None));
     }
 }
 

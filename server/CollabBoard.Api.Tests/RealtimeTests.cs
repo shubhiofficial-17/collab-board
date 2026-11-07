@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CollabBoard.Api.Tests;
 
@@ -22,13 +23,14 @@ public sealed class RealtimeTests(WebApplicationFactory<Program> factory) : ICla
         public ValueTask DisposeAsync() => Connection.DisposeAsync();
     }
 
-    private async Task<Client> ConnectAsync()
+    private async Task<Client> ConnectAsync(TestUser user)
     {
         var connection = new HubConnectionBuilder()
             .WithUrl(new Uri(factory.Server.BaseAddress, BoardHub.Path), options =>
             {
                 options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
                 options.Transports = HttpTransportType.LongPolling;
+                options.Headers["Cookie"] = user.Cookie;
             })
             .Build();
 
@@ -47,26 +49,38 @@ public sealed class RealtimeTests(WebApplicationFactory<Program> factory) : ICla
         return await channel.Reader.ReadAsync(timeout.Token);
     }
 
-    private async Task<string> NewBoardAsync()
+    /// <summary>A board owned by <paramref name="owner"/>, which <paramref name="others"/> can edit.</summary>
+    private async Task<string> NewBoardAsync(TestUser owner, params TestUser[] others)
     {
-        var created = await factory.CreateClient().PostAsJsonAsync("/api/boards", new { title = "Live" });
-        return (await created.Content.ReadFromJsonAsync<Board>())!.Id;
+        var created = await owner.Client.PostAsJsonAsync("/api/boards", new { title = "Live" });
+        var id = (await created.Content.ReadFromJsonAsync<Board>())!.Id;
+        var store = factory.Services.GetRequiredService<IBoardStore>();
+        foreach (var other in others)
+        {
+            await store.SetMemberAsync(id, new BoardMember(other.Me.Id, BoardRoles.Editor), CancellationToken.None);
+        }
+
+        return id;
     }
 
     [Fact]
     public async Task Saved_changes_reach_other_viewers_but_not_the_sender()
     {
-        var boardId = await NewBoardAsync();
-        await using var alice = await ConnectAsync();
-        await using var bob = await ConnectAsync();
+        var aliceUser = await factory.SignUpAsync("Alice");
+        var bobUser = await factory.SignUpAsync("Bob");
+        var boardId = await NewBoardAsync(aliceUser, bobUser);
+        await using var alice = await ConnectAsync(aliceUser);
+        await using var bob = await ConnectAsync(bobUser);
         await alice.Connection.InvokeAsync<JoinResult>("JoinBoard", boardId, "Alice", "#e11d48");
         await bob.Connection.InvokeAsync<JoinResult>("JoinBoard", boardId, "Bob", "#2563eb");
 
-        var http = factory.CreateClient();
-        http.DefaultRequestHeaders.Add("X-Connection-Id", alice.Connection.ConnectionId);
-        var save = await http.PostAsJsonAsync($"/api/boards/{boardId}/ops", new
+        var save = await aliceUser.Client.SendAsync(new HttpRequestMessage(HttpMethod.Post, $"/api/boards/{boardId}/ops")
         {
-            ops = new object[] { new { type = "add", shape = new { id = "s1", kind = "rect", x = 1, y = 2, w = 3, h = 4, color = "#fde68a", z = 1 } } },
+            Headers = { { "X-Connection-Id", alice.Connection.ConnectionId } },
+            Content = JsonContent.Create(new
+            {
+                ops = new object[] { new { type = "add", shape = new { id = "s1", kind = "rect", x = 1, y = 2, w = 3, h = 4, color = "#fde68a", z = 1 } } },
+            }),
         });
         save.EnsureSuccessStatusCode();
 
@@ -80,14 +94,17 @@ public sealed class RealtimeTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Presence_shows_who_joins_and_leaves()
     {
-        var boardId = await NewBoardAsync();
-        await using var alice = await ConnectAsync();
-        var bob = await ConnectAsync();
+        var aliceUser = await factory.SignUpAsync("Alice");
+        var bobUser = await factory.SignUpAsync("Bob");
+        var boardId = await NewBoardAsync(aliceUser, bobUser);
+        await using var alice = await ConnectAsync(aliceUser);
+        var bob = await ConnectAsync(bobUser);
 
-        var aliceJoin = await alice.Connection.InvokeAsync<JoinResult>("JoinBoard", boardId, "Alice", "#e11d48");
+        // Names come from the accounts, not from what the client claims.
+        var aliceJoin = await alice.Connection.InvokeAsync<JoinResult>("JoinBoard", boardId, "Someone else", "#e11d48");
         Assert.Equal("Alice", Assert.Single(aliceJoin.Participants).Name);
 
-        var bobJoin = await bob.Connection.InvokeAsync<JoinResult>("JoinBoard", boardId, "  Bob  ", "#2563eb");
+        var bobJoin = await bob.Connection.InvokeAsync<JoinResult>("JoinBoard", boardId, "Bob", "#2563eb");
         Assert.Equal(["Alice", "Bob"], bobJoin.Participants.Select(p => p.Name));
         Assert.Equal("Bob", (await Next(alice.Joined)).Name);
 
@@ -99,11 +116,12 @@ public sealed class RealtimeTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Cursors_are_relayed_to_others_on_the_same_board_only()
     {
-        var boardId = await NewBoardAsync();
-        var otherBoardId = await NewBoardAsync();
-        await using var alice = await ConnectAsync();
-        await using var bob = await ConnectAsync();
-        await using var carol = await ConnectAsync();
+        var user = await factory.SignUpAsync("Sam"); // one person with three tabs open
+        var boardId = await NewBoardAsync(user);
+        var otherBoardId = await NewBoardAsync(user);
+        await using var alice = await ConnectAsync(user);
+        await using var bob = await ConnectAsync(user);
+        await using var carol = await ConnectAsync(user);
         await alice.Connection.InvokeAsync<JoinResult>("JoinBoard", boardId, "Alice", "#e11d48");
         await bob.Connection.InvokeAsync<JoinResult>("JoinBoard", boardId, "Bob", "#2563eb");
         await carol.Connection.InvokeAsync<JoinResult>("JoinBoard", otherBoardId, "Carol", "#16a34a");
@@ -120,9 +138,33 @@ public sealed class RealtimeTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Joining_a_missing_board_fails()
     {
-        await using var alice = await ConnectAsync();
+        await using var alice = await ConnectAsync(await factory.SignUpAsync());
 
         var error = await Assert.ThrowsAsync<HubException>(() => alice.Connection.InvokeAsync<JoinResult>("JoinBoard", "nope", "Alice", "#e11d48"));
         Assert.Contains("Board not found", error.Message);
+    }
+
+    [Fact]
+    public async Task Joining_someone_elses_board_fails()
+    {
+        var boardId = await NewBoardAsync(await factory.SignUpAsync("Owner"));
+        await using var stranger = await ConnectAsync(await factory.SignUpAsync("Stranger"));
+
+        var error = await Assert.ThrowsAsync<HubException>(() => stranger.Connection.InvokeAsync<JoinResult>("JoinBoard", boardId, "S", "#e11d48"));
+        Assert.Contains("Board not found", error.Message);
+    }
+
+    [Fact]
+    public async Task Connecting_needs_you_to_be_signed_in()
+    {
+        var connection = new HubConnectionBuilder()
+            .WithUrl(new Uri(factory.Server.BaseAddress, BoardHub.Path), options =>
+            {
+                options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
+                options.Transports = HttpTransportType.LongPolling;
+            })
+            .Build();
+
+        await Assert.ThrowsAnyAsync<Exception>(() => connection.StartAsync());
     }
 }
