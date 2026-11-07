@@ -20,7 +20,7 @@ Built with **Angular 18** (standalone components, signals), **.NET 8** (minimal 
 | 6b. Sharing | Invite links for editors and viewers, view-only mode, managing who has access | ✅ Done |
 | 7. History | Automatic and named versions, preview, restore (live for everyone, and undoable) | ✅ Done |
 | 8. AI | Describe a diagram, get sticky notes and arrows laid out on the board (through the LLM Gateway) | ✅ Done |
-| 9. Quality | End-to-end tests, load tests, deployment | ⏳ Next |
+| 9. Quality | Playwright end-to-end tests in CI, k6 load test, production hardening and a deployment guide | ✅ Done |
 
 ## Using the board
 
@@ -40,7 +40,7 @@ Built with **Angular 18** (standalone components, signals), **.NET 8** (minimal 
 docker compose up --build
 ```
 
-Open http://localhost:8080, then open the same board in a second window to see live sync and cursors. Boards are stored in MongoDB (a Docker volume keeps them across restarts).
+Open http://localhost:8080 and create an account. Share a board from its **Share** button and open the invite link in a private window (as a second account) to see live sync and cursors. Boards are stored in MongoDB (a Docker volume keeps them across restarts).
 
 ### Develop
 
@@ -52,21 +52,24 @@ cd web && npm install && npm start                  # app on http://localhost:42
 ### Test
 
 ```bash
-cd server && dotnet test
-cd web && npm test
+cd server && dotnet test                              # unit + integration (MongoDB tests use Testcontainers)
+cd web && npm test                                    # Angular unit tests
+docker compose up -d --build && cd e2e && npm install && npx playwright install chromium && npx playwright test
+docker run --rm -i --network host grafana/k6 run - < loadtest/boards.js   # load test
 ```
+
+Deploying: see [docs/deploy.md](docs/deploy.md).
 
 ## Layout
 
 ```
-server/   .NET 8 API (CollabBoard.Api) and its tests
-web/      Angular 18 app
-docs/adr/ Architecture Decision Records
+server/    .NET 8 API (CollabBoard.Api) and its tests
+web/       Angular 18 app
+e2e/       Playwright end-to-end tests
+loadtest/  k6 load test
+docs/adr/  Architecture Decision Records
+docs/      deployment guide
 ```
-
-## License
-
-MIT
 
 ## AI diagrams
 
@@ -82,3 +85,7 @@ AI_BASE_URL=http://host.docker.internal:8080/v1 AI_API_KEY=gw-demo-key AI_MODEL=
 
 The model only describes nodes and edges; the server lays them out and the browser adds them as one
 normal change, so a single undo removes the whole diagram. See ADR 0010.
+
+## License
+
+MIT
