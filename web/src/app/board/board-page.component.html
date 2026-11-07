@@ -35,6 +35,9 @@
       @if (!canEdit()) {
         <span class="badge" title="You can look, but not change this board.">View only</span>
       }
+      @if (aiEnabled() && canEdit() && !fromCache()) {
+        <button type="button" class="ai" [attr.aria-pressed]="aiOpen()" (click)="aiOpen.set(!aiOpen())">✨ Generate</button>
+      }
       @if (!fromCache()) {
         <button type="button" class="history" [attr.aria-pressed]="historyOpen()" (click)="historyOpen.set(!historyOpen())">History</button>
       }
@@ -63,6 +66,9 @@
         <app-board-canvas [remoteCursors]="realtime.cursors()" (cursorMoved)="onCursorMoved($event)" />
         @if (canEdit()) {
           <app-toolbar class="floating-toolbar" />
+        }
+        @if (aiOpen() && board(); as current) {
+          <app-ai-prompt [boardId]="current.id" [center]="viewCenter()" (generated)="addGenerated($event)" (closed)="aiOpen.set(false)" />
         }
         @if (historyOpen() && board(); as current) {
           <app-history-panel [boardId]="current.id" [canEdit]="canEdit()" (closed)="historyOpen.set(false)" (restored)="resync()" />

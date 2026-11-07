@@ -1,4 +1,5 @@
 using CollabBoard.Api.Accounts;
+using CollabBoard.Api.Ai;
 using CollabBoard.Api.Boards;
 using CollabBoard.Api.History;
 using CollabBoard.Api.Realtime;
@@ -75,17 +76,22 @@ builder.Services.AddSingleton<PresenceTracker>();
 builder.Services.AddSingleton<BoardChanges>();
 builder.Services.AddSingleton<BoardHistory>();
 
+// AI: prompt to diagram through an OpenAI-compatible API (the LLM Gateway). Off unless Ai:BaseUrl is set.
+builder.Services.AddAi(builder.Configuration);
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 app.MapAccountEndpoints();
 app.MapBoardEndpoints();
 app.MapSharingEndpoints();
 app.MapHistoryEndpoints();
+app.MapAiEndpoints();
 app.MapHub<BoardHub>(BoardHub.Path);
 
 app.Run();

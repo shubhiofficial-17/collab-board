@@ -19,8 +19,8 @@ Built with **Angular 18** (standalone components, signals), **.NET 8** (minimal 
 | 6a. Accounts | Email and password sign-in with a session cookie; boards belong to their creator | ✅ Done |
 | 6b. Sharing | Invite links for editors and viewers, view-only mode, managing who has access | ✅ Done |
 | 7. History | Automatic and named versions, preview, restore (live for everyone, and undoable) | ✅ Done |
-| 8. AI | Turn a prompt into a diagram | ⏳ Next |
-| 9. Quality | End-to-end tests, load tests, deployment | Planned |
+| 8. AI | Describe a diagram, get sticky notes and arrows laid out on the board (through the LLM Gateway) | ✅ Done |
+| 9. Quality | End-to-end tests, load tests, deployment | ⏳ Next |
 
 ## Using the board
 
@@ -67,3 +67,18 @@ docs/adr/ Architecture Decision Records
 ## License
 
 MIT
+
+## AI diagrams
+
+The **✨ Generate** button turns a description ("onboarding flow for a new engineer") into sticky notes
+and arrows. It's off unless the server is pointed at an OpenAI-compatible API, ideally the
+[LLM Gateway](https://github.com/shubhiofficial-17/llm_gateway), which adds caching, per-team budgets
+and provider fallback:
+
+```bash
+# with the gateway running on the host (its demo key is gw-demo-key)
+AI_BASE_URL=http://host.docker.internal:8080/v1 AI_API_KEY=gw-demo-key AI_MODEL=gpt-4o-mini docker compose up --build
+```
+
+The model only describes nodes and edges; the server lays them out and the browser adds them as one
+normal change, so a single undo removes the whole diagram. See ADR 0010.
