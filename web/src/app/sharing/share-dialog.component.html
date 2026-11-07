@@ -1,0 +1,48 @@
+<div class="backdrop" (click)="closed.emit()"></div>
+<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="share-title" (keydown.escape)="closed.emit()">
+  <header>
+    <h2 id="share-title">Share this board</h2>
+    <button type="button" class="close" aria-label="Close" (click)="closed.emit()">×</button>
+  </header>
+
+  <h3>Invite links</h3>
+  <p class="muted">Anyone signed in who opens a link gets access. Making a new link turns the old one off.</p>
+  @for (role of roles; track role) {
+    <div class="link-row" [attr.data-role]="role">
+      <span class="role">{{ role === 'editor' ? 'Can edit' : 'Can view' }}</span>
+      @if (linkFor(role); as link) {
+        <input readonly [value]="link" [attr.aria-label]="role + ' link'" (focus)="$any($event.target).select()" />
+        <button type="button" (click)="copy(role)">{{ copied() === role ? 'Copied' : 'Copy' }}</button>
+        <button type="button" class="link" (click)="createLink(role)">New link</button>
+        <button type="button" class="link" (click)="removeLink(role)">Turn off</button>
+      } @else {
+        <button type="button" class="create" (click)="createLink(role)">Create link</button>
+      }
+    </div>
+  }
+
+  <h3>People with access</h3>
+  <ul class="members">
+    @for (member of sharing()?.members ?? []; track member.userId) {
+      <li>
+        <span class="who">
+          <strong>{{ member.name }}</strong>
+          <span class="muted">{{ member.email }}</span>
+        </span>
+        @if (member.role === 'owner') {
+          <span class="muted">Owner</span>
+        } @else {
+          <select [value]="member.role" [attr.aria-label]="'Role of ' + member.name" (change)="setRole(member.userId, $any($event.target).value)">
+            <option value="editor">Can edit</option>
+            <option value="viewer">Can view</option>
+          </select>
+          <button type="button" class="link" (click)="remove(member.userId)">Remove</button>
+        }
+      </li>
+    }
+  </ul>
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+</section>

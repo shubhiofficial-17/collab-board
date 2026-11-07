@@ -105,7 +105,8 @@ export class BoardCanvasComponent {
     const world = screenToWorld(this.state.viewport(), screen);
     const tool = this.state.tool();
 
-    if (event.button === 1 || tool === 'hand' || this.spaceHeld()) {
+    // Viewers can only look around: any drag pans.
+    if (event.button === 1 || tool === 'hand' || this.spaceHeld() || (this.state.readOnly() && event.button === 0)) {
       this.drag = { kind: 'pan', startScreen: screen, startViewport: this.state.viewport() };
       this.capture(event);
       return;
@@ -275,6 +276,10 @@ export class BoardCanvasComponent {
   }
 
   onDoubleClick(event: MouseEvent): void {
+    if (this.state.readOnly()) {
+      return;
+    }
+
     const id = this.hitTest(event);
     if (id && this.state.shape(id)?.kind === 'sticky') {
       this.state.select([id]);

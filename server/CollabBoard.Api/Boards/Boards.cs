@@ -8,6 +8,15 @@ public sealed record Board(string Id, string Title, DateTimeOffset CreatedAt, Da
 /// <summary>Someone with access to a board, and what they may do (see <see cref="BoardRoles"/>).</summary>
 public sealed record BoardMember(string UserId, string Role);
 
+/// <summary>
+/// An invite link: anyone signed in who opens it gets <see cref="Role"/> on the board. A board has at
+/// most one link per role; making a new one replaces (and so revokes) the old one.
+/// </summary>
+public sealed record ShareLink(string Token, string Role);
+
+/// <summary>The board a share link belongs to.</summary>
+public sealed record ShareLinkTarget(string BoardId, string Role);
+
 public static class BoardRoles
 {
     public const string Owner = "owner";
@@ -75,6 +84,14 @@ public interface IBoardStore
     /// <summary>Takes someone's access away. False if the board doesn't exist.</summary>
     Task<bool> RemoveMemberAsync(string id, string userId, CancellationToken ct);
 
+    /// <summary>The board's share links, or null if it doesn't exist.</summary>
+    Task<IReadOnlyList<ShareLink>?> GetShareLinksAsync(string id, CancellationToken ct);
+
+    /// <summary>Sets (or with a null token, removes) the board's link for a role. False if the board doesn't exist.</summary>
+    Task<bool> SetShareLinkAsync(string id, string role, string? token, CancellationToken ct);
+
+    Task<ShareLinkTarget?> FindShareLinkAsync(string token, CancellationToken ct);
+
     /// <summary>Applies operations atomically. Returns null if the board doesn't exist.</summary>
     Task<ApplyOpsResult?> ApplyOpsAsync(string id, IReadOnlyList<BoardOp> ops, CancellationToken ct);
 }
@@ -87,6 +104,7 @@ public sealed class InMemoryBoardStore(TimeProvider time) : IBoardStore
     private sealed class Entry(Board board)
     {
         public Board Board { get; set; } = board;
+        public List<ShareLink> Links { get; set; } = new();
         public List<Shape> Shapes { get; } = new();
         public long Version { get; set; }
     }
@@ -145,6 +163,54 @@ public sealed class InMemoryBoardStore(TimeProvider time) : IBoardStore
 
     public Task<bool> RemoveMemberAsync(string id, string userId, CancellationToken ct) =>
         UpdateMembers(id, members => [.. members.Where(m => m.UserId != userId)]);
+
+    public Task<IReadOnlyList<ShareLink>?> GetShareLinksAsync(string id, CancellationToken ct)
+    {
+        if (!_boards.TryGetValue(id, out var entry))
+        {
+            return Task.FromResult<IReadOnlyList<ShareLink>?>(null);
+        }
+
+        lock (entry)
+        {
+            return Task.FromResult<IReadOnlyList<ShareLink>?>(entry.Links.ToList());
+        }
+    }
+
+    public Task<bool> SetShareLinkAsync(string id, string role, string? token, CancellationToken ct)
+    {
+        if (!_boards.TryGetValue(id, out var entry))
+        {
+            return Task.FromResult(false);
+        }
+
+        lock (entry)
+        {
+            entry.Links = [.. entry.Links.Where(l => l.Role != role)];
+            if (token is not null)
+            {
+                entry.Links.Add(new ShareLink(token, role));
+            }
+
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task<ShareLinkTarget?> FindShareLinkAsync(string token, CancellationToken ct)
+    {
+        foreach (var (id, entry) in _boards)
+        {
+            lock (entry)
+            {
+                if (entry.Links.FirstOrDefault(l => l.Token == token) is { } link)
+                {
+                    return Task.FromResult<ShareLinkTarget?>(new ShareLinkTarget(id, link.Role));
+                }
+            }
+        }
+
+        return Task.FromResult<ShareLinkTarget?>(null);
+    }
 
     private Task<bool> UpdateMembers(string id, Func<IReadOnlyList<BoardMember>, List<BoardMember>> change)
     {

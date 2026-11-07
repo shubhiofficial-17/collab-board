@@ -17,6 +17,19 @@ export interface BoardMember {
   role: BoardRole;
 }
 
+/** Roles that can be given through a link or changed by the owner. */
+export type ShareRole = 'editor' | 'viewer';
+
+export interface ShareLink {
+  token: string;
+  role: ShareRole;
+}
+
+export interface Sharing {
+  members: { userId: string; name: string; email: string; role: BoardRole }[];
+  links: ShareLink[];
+}
+
 /** A board with everything on it. */
 export interface BoardContent extends Board {
   version: number;

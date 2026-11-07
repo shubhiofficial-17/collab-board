@@ -80,6 +80,7 @@ app.UseAuthorization();
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 app.MapAccountEndpoints();
 app.MapBoardEndpoints();
+app.MapSharingEndpoints();
 app.MapHub<BoardHub>(BoardHub.Path);
 
 app.Run();

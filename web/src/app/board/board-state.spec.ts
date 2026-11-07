@@ -155,4 +155,14 @@ describe('BoardState', () => {
 
     expect(state.shape('a')!.x).toBe(7);
   });
+
+  it('ignores local changes when read-only, but still takes remote ones', () => {
+    state.readOnly.set(true);
+
+    state.apply([{ type: 'add', shape: rect('a') }]);
+    state.applyRemote([{ type: 'add', shape: rect('b'), ts: LATER }]);
+
+    expect([...state.shapes().keys()]).toEqual(['b']);
+    expect(state.canUndo()).toBeFalse();
+  });
 });

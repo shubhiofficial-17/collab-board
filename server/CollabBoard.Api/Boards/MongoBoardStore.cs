@@ -105,6 +105,46 @@ public sealed class MongoBoardStore(IMongoDatabase database, TimeProvider time, 
         throw new InvalidOperationException($"Couldn't update the members of board {id}.");
     }
 
+    public async Task<IReadOnlyList<ShareLink>?> GetShareLinksAsync(string id, CancellationToken ct)
+    {
+        var doc = await _boards.Find(b => b.Id == id)
+            .Project<BoardDocument>(Builders<BoardDocument>.Projection.Exclude(b => b.Shapes))
+            .FirstOrDefaultAsync(ct);
+        return doc?.ShareLinks;
+    }
+
+    public async Task<bool> SetShareLinkAsync(string id, string role, string? token, CancellationToken ct)
+    {
+        // Remove the old link for the role, then add the new one. Two updates, but only the owner
+        // changes links, and a lost race just leaves one of the two new links in place.
+        var removed = await _boards.UpdateOneAsync(
+            b => b.Id == id,
+            Builders<BoardDocument>.Update.PullFilter(b => b.ShareLinks, l => l.Role == role),
+            cancellationToken: ct);
+        if (removed.MatchedCount == 0)
+        {
+            return false;
+        }
+
+        if (token is not null)
+        {
+            await _boards.UpdateOneAsync(
+                b => b.Id == id,
+                Builders<BoardDocument>.Update.Push(b => b.ShareLinks, new ShareLink(token, role)),
+                cancellationToken: ct);
+        }
+
+        return true;
+    }
+
+    public async Task<ShareLinkTarget?> FindShareLinkAsync(string token, CancellationToken ct)
+    {
+        var doc = await _boards.Find(Builders<BoardDocument>.Filter.ElemMatch(b => b.ShareLinks, l => l.Token == token))
+            .Project<BoardDocument>(Builders<BoardDocument>.Projection.Exclude(b => b.Shapes))
+            .FirstOrDefaultAsync(ct);
+        return doc?.ShareLinks.FirstOrDefault(l => l.Token == token) is { } link ? new ShareLinkTarget(doc.Id, link.Role) : null;
+    }
+
     public async Task<bool> RemoveMemberAsync(string id, string userId, CancellationToken ct) =>
         (await _boards.UpdateOneAsync(
             b => b.Id == id,
@@ -155,6 +195,9 @@ public sealed class MongoBoardStore(IMongoDatabase database, TimeProvider time, 
         await boards.Indexes.CreateOneAsync(
             new CreateIndexModel<BoardDocument>(Builders<BoardDocument>.IndexKeys.Ascending("members.userId").Descending(b => b.UpdatedAt)),
             cancellationToken: ct);
+        await boards.Indexes.CreateOneAsync(
+            new CreateIndexModel<BoardDocument>(Builders<BoardDocument>.IndexKeys.Ascending("shareLinks.token"), new CreateIndexOptions { Sparse = true }),
+            cancellationToken: ct);
     }
 }
 
@@ -177,6 +220,8 @@ public sealed class BoardDocument
     public List<Shape> Shapes { get; set; } = new();
 
     public List<BoardMember> Members { get; set; } = new();
+
+    public List<ShareLink> ShareLinks { get; set; } = new();
 
     public Board ToBoard() =>
         new(Id, Title, new DateTimeOffset(CreatedAt, TimeSpan.Zero), new DateTimeOffset(UpdatedAt, TimeSpan.Zero), Members);

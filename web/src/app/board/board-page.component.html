@@ -19,7 +19,7 @@
         />
       } @else {
         <h1>
-          <button type="button" class="title" title="Rename board" [disabled]="!board()" (click)="renaming.set(true)">
+          <button type="button" class="title" title="Rename board" [disabled]="!board() || !canEdit()" (click)="renaming.set(true)">
             {{ board()?.title ?? 'Loading…' }}
           </button>
         </h1>
@@ -32,6 +32,12 @@
         <span class="live" [attr.data-status]="realtime.status()" [title]="'Connection: ' + realtime.status()"></span>
       </div>
 
+      @if (!canEdit()) {
+        <span class="badge" title="You can look, but not change this board.">View only</span>
+      }
+      @if (role() === 'owner' && !fromCache()) {
+        <button type="button" class="share" (click)="sharingOpen.set(true)">Share</button>
+      }
       @if (fromCache()) {
         <span class="offline-copy" title="The server can't be reached. Your changes are kept on this device and sent when you're back online.">
           Offline copy
@@ -52,8 +58,13 @@
     <section class="canvas-area">
       @if (loaded()) {
         <app-board-canvas [remoteCursors]="realtime.cursors()" (cursorMoved)="onCursorMoved($event)" />
-        <app-toolbar class="floating-toolbar" />
+        @if (canEdit()) {
+          <app-toolbar class="floating-toolbar" />
+        }
       }
     </section>
   </div>
+  @if (sharingOpen() && board(); as current) {
+    <app-share-dialog [boardId]="current.id" (closed)="sharingOpen.set(false)" />
+  }
 }

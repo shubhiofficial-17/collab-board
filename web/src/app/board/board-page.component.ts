@@ -1,8 +1,8 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, ElementRef, HostListener, OnInit, effect, inject, input, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, OnInit, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { Board } from '../boards/board';
+import { Board, BoardRole } from '../boards/board';
 import { BoardsApi } from '../boards/boards-api.service';
 import { AuthService } from '../auth/auth.service';
 import { loadIdentity } from '../realtime/identity';
@@ -13,12 +13,13 @@ import { BoardState } from './board-state';
 import { BoardSync } from './board-sync';
 import { BoardCanvasComponent } from './canvas/board-canvas.component';
 import { OfflineCache } from './offline-cache';
+import { ShareDialogComponent } from '../sharing/share-dialog.component';
 import { ToolbarComponent } from './toolbar/toolbar.component';
 
 @Component({
   selector: 'app-board-page',
   standalone: true,
-  imports: [RouterLink, BoardCanvasComponent, ToolbarComponent],
+  imports: [RouterLink, BoardCanvasComponent, ToolbarComponent, ShareDialogComponent],
   // One state, save queue and live connection per open board.
   providers: [BoardState, BoardSync, RealtimeService],
   templateUrl: './board-page.component.html',
@@ -42,10 +43,18 @@ export class BoardPageComponent implements OnInit {
   readonly renaming = signal(false);
   /** Opened from the local copy because the server couldn't be reached. */
   readonly fromCache = signal(false);
+  readonly sharingOpen = signal(false);
+  /** This user's role. Unknown (e.g. no members listed) counts as editor; the server has the final say. */
+  readonly role = computed<BoardRole>(() => {
+    const me = this.auth.me();
+    return this.board()?.members?.find((m) => m.userId === me?.id)?.role ?? 'editor';
+  });
+  readonly canEdit = computed(() => this.role() !== 'viewer');
   private readonly titleInput = viewChild<ElementRef<HTMLInputElement>>('titleInput');
 
   constructor() {
     effect(() => this.titleInput()?.nativeElement.select());
+    effect(() => this.state.readOnly.set(!this.canEdit()), { allowSignalWrites: true });
 
     // Keep a local copy of the board, so it can be opened offline. Written a moment after changes
     // settle rather than on every pointer move during a drag.
