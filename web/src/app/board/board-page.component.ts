@@ -1,13 +1,17 @@
-import { Component, ElementRef, HostListener, OnInit, effect, inject, input, signal, viewChild } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Component, DestroyRef, ElementRef, HostListener, OnInit, effect, inject, input, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { Board } from '../boards/board';
 import { BoardsApi } from '../boards/boards-api.service';
 import { loadIdentity } from '../realtime/identity';
 import { RealtimeService } from '../realtime/realtime.service';
+import { StampedOp } from './model/crdt';
 import { Point } from './model/viewport';
 import { BoardState } from './board-state';
 import { BoardSync } from './board-sync';
 import { BoardCanvasComponent } from './canvas/board-canvas.component';
+import { OfflineCache } from './offline-cache';
 import { ToolbarComponent } from './toolbar/toolbar.component';
 
 @Component({
@@ -22,6 +26,8 @@ import { ToolbarComponent } from './toolbar/toolbar.component';
 export class BoardPageComponent implements OnInit {
   private readonly api = inject(BoardsApi);
   private readonly state = inject(BoardState);
+  private readonly cache = inject(OfflineCache);
+  private readonly destroyRef = inject(DestroyRef);
   readonly sync = inject(BoardSync);
   readonly realtime = inject(RealtimeService);
 
@@ -32,26 +38,78 @@ export class BoardPageComponent implements OnInit {
   readonly notFound = signal(false);
   readonly loaded = signal(false);
   readonly renaming = signal(false);
+  /** Opened from the local copy because the server couldn't be reached. */
+  readonly fromCache = signal(false);
   private readonly titleInput = viewChild<ElementRef<HTMLInputElement>>('titleInput');
 
   constructor() {
     effect(() => this.titleInput()?.nativeElement.select());
+
+    // Keep a local copy of the board, so it can be opened offline. Written a moment after changes
+    // settle rather than on every pointer move during a drag.
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    effect(() => {
+      const shapes = this.state.allShapes();
+      const board = this.board();
+      if (!this.loaded() || !board) {
+        return;
+      }
+
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(() => {
+        timer = null;
+        this.cache.saveSnapshot(board, shapes);
+      }, 300);
+    });
+    this.destroyRef.onDestroy(() => timer !== null && clearTimeout(timer));
   }
 
   ngOnInit(): void {
-    this.api.get(this.id()).subscribe({
+    const id = this.id();
+    const cached = this.cache.load(id);
+    this.api.get(id).subscribe({
       next: (content) => {
-        this.board.set(content);
         this.state.load(content.shapes);
-        this.sync.start(content.id, this.state.committed, () => this.realtime.connectionId);
-        this.loaded.set(true);
-        void this.realtime.connect(content.id, loadIdentity(), {
-          onOps: (message) => this.state.applyRemote(message.ops),
-          onResync: () => this.resync(),
-        });
+        if (cached?.pending.length) {
+          // Changes made offline last time: show them on top of the server copy, then send them.
+          this.state.resync(content.shapes, cached.pending);
+        }
+        this.cache.saveSnapshot(content, this.state.allShapes());
+        this.open(content, cached?.pending ?? []);
       },
-      error: () => this.notFound.set(true),
+      error: (error: unknown) => {
+        if (cached && isUnreachable(error)) {
+          this.state.load(cached.shapes);
+          this.fromCache.set(true);
+          this.open(cached.board, cached.pending);
+        } else {
+          this.cache.remove(id);
+          this.notFound.set(true);
+        }
+      },
     });
+  }
+
+  private open(board: Board, pending: readonly StampedOp[]): void {
+    this.board.set(board);
+    this.sync.unsavedChanged
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((unsaved) => this.cache.savePending(board.id, unsaved));
+    this.sync.start(board.id, this.state.committed, () => this.realtime.connectionId, pending);
+    this.loaded.set(true);
+    void this.realtime.connect(board.id, loadIdentity(), {
+      onOps: (message) => this.state.applyRemote(message.ops),
+      onResync: () => this.resync(),
+    });
+  }
+
+  /** The browser is back online: send unsaved changes and reconnect. */
+  @HostListener('window:online')
+  onOnline(): void {
+    this.sync.retryNow();
+    void this.realtime.retry();
   }
 
   onCursorMoved(point: Point): void {
@@ -65,8 +123,12 @@ export class BoardPageComponent implements OnInit {
       return;
     }
 
+    this.sync.retryNow();
     this.api.get(board.id).subscribe({
-      next: (content) => this.state.resync(content.shapes, this.sync.unsaved),
+      next: (content) => {
+        this.state.resync(content.shapes, this.sync.unsaved);
+        this.fromCache.set(false);
+      },
     });
   }
 
@@ -109,4 +171,9 @@ export class BoardPageComponent implements OnInit {
       event.preventDefault();
     }
   }
+}
+
+/** No response, or the server is failing: worth falling back to the local copy. */
+function isUnreachable(error: unknown): boolean {
+  return error instanceof HttpErrorResponse && (error.status === 0 || error.status >= 500);
 }

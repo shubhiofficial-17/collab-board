@@ -39,6 +39,8 @@ export class BoardState {
    */
   readonly committed: Observable<StampedOp[]> = this._committed.asObservable();
 
+  /** Every known shape including tombstones, e.g. for caching the board offline. */
+  readonly allShapes = computed(() => [...this._all().values()]);
   /** The shapes on the board (deleted ones excluded). */
   readonly shapes = computed(() => visibleShapes(this._all()));
   /** Shapes in drawing order, bottom first. Ties (possible after concurrent edits) go by id. */

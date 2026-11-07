@@ -32,11 +32,16 @@
         <span class="live" [attr.data-status]="realtime.status()" [title]="'Connection: ' + realtime.status()"></span>
       </div>
 
+      @if (fromCache()) {
+        <span class="offline-copy" title="The server can't be reached. Your changes are kept on this device and sent when you're back online.">
+          Offline copy
+        </span>
+      }
       <span class="save-status" [attr.data-status]="sync.status()" role="status">
         @switch (sync.status()) {
           @case ('saving') { Saving… }
           @case ('offline') {
-            Offline: changes not saved yet
+            Offline: changes kept on this device
             <button type="button" class="link" (click)="sync.retryNow()">Retry</button>
           }
           @case ('rejected') { Some changes couldn't be saved }

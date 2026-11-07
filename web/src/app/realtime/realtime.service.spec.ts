@@ -86,4 +86,15 @@ describe('RealtimeService', () => {
 
     expect(service.status()).toBe('offline');
   });
+
+  it('connects again on retry and asks for a resync', async () => {
+    hub.startError = new Error('no server');
+    await connect();
+
+    hub.startError = null;
+    await service.retry();
+
+    expect(service.status()).toBe('live');
+    expect(resyncs).toBe(1);
+  });
 });

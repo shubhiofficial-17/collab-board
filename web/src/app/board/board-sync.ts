@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { DestroyRef, Injectable, inject, signal } from '@angular/core';
-import { Observable, Subscription, retry, throwError, timer } from 'rxjs';
+import { Observable, Subject, Subscription, retry, throwError, timer } from 'rxjs';
 import { BoardsApi } from '../boards/boards-api.service';
 import { StampedOp } from './model/crdt';
 
@@ -23,16 +23,30 @@ export class BoardSync {
   private queue: StampedOp[] = [];
   private inFlightBatch: StampedOp[] | null = null;
   private subscription?: Subscription;
+  private readonly _unsavedChanged = new Subject<StampedOp[]>();
+
+  /** Emits the unsaved changes whenever they change, so they can be kept across reloads (OfflineCache). */
+  readonly unsavedChanged: Observable<StampedOp[]> = this._unsavedChanged.asObservable();
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.subscription?.unsubscribe());
   }
 
-  start(boardId: string, changes: Observable<StampedOp[]>, connectionId: () => string | null = () => null): void {
+  /**
+   * Starts saving `changes`. `pending` are changes left unsaved last time (e.g. made offline before a
+   * reload); they are sent first.
+   */
+  start(
+    boardId: string,
+    changes: Observable<StampedOp[]>,
+    connectionId: () => string | null = () => null,
+    pending: readonly StampedOp[] = [],
+  ): void {
     this.boardId = boardId;
     this.connectionId = connectionId;
     this.subscription?.unsubscribe();
     this.subscription = changes.subscribe((ops) => this.enqueue(ops));
+    this.enqueue([...pending]);
   }
 
   get hasUnsavedChanges(): boolean {
@@ -55,7 +69,12 @@ export class BoardSync {
     }
 
     this.queue.push(...ops);
+    this.notify();
     this.flush();
+  }
+
+  private notify(): void {
+    this._unsavedChanged.next(this.unsaved);
   }
 
   private flush(): void {
@@ -74,6 +93,7 @@ export class BoardSync {
       .subscribe({
         next: () => {
           this.inFlightBatch = null;
+          this.notify();
           if (this.queue.length > 0) {
             this.flush();
           } else {
@@ -83,6 +103,7 @@ export class BoardSync {
         error: (error: unknown) => {
           this.inFlightBatch = null;
           if (isClientError(error)) {
+            this.notify();
             this.status.set('rejected');
             this.flush();
           } else {

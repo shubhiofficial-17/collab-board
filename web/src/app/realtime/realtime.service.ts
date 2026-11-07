@@ -130,6 +130,25 @@ export class RealtimeService {
     }
   }
 
+  /**
+   * Tries to connect again after the connection was lost for good (or never made), e.g. when the
+   * browser reports it's back online. Missed changes are then fetched through `onResync`.
+   */
+  async retry(): Promise<void> {
+    if (this.status() !== 'offline' || !this.connection) {
+      return;
+    }
+
+    this.status.set('connecting');
+    try {
+      await this.connection.start();
+      await this.join();
+      this.handlers?.onResync();
+    } catch {
+      this.status.set('offline');
+    }
+  }
+
   /** Shares this user's cursor (world coordinates), throttled. */
   moveCursor(x: number, y: number): void {
     this.pendingCursor = { x, y };
