@@ -19,22 +19,29 @@ export class BoardSync {
   readonly status = signal<SaveStatus>('saved');
 
   private boardId = '';
+  private connectionId: () => string | null = () => null;
   private queue: Op[] = [];
-  private inFlight = false;
+  private inFlightBatch: Op[] | null = null;
   private subscription?: Subscription;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.subscription?.unsubscribe());
   }
 
-  start(boardId: string, changes: Observable<Op[]>): void {
+  start(boardId: string, changes: Observable<Op[]>, connectionId: () => string | null = () => null): void {
     this.boardId = boardId;
+    this.connectionId = connectionId;
     this.subscription?.unsubscribe();
     this.subscription = changes.subscribe((ops) => this.enqueue(ops));
   }
 
   get hasUnsavedChanges(): boolean {
-    return this.inFlight || this.queue.length > 0;
+    return this.inFlightBatch !== null || this.queue.length > 0;
+  }
+
+  /** Changes not yet confirmed by the server, oldest first. */
+  get unsaved(): Op[] {
+    return [...(this.inFlightBatch ?? []), ...this.queue];
   }
 
   /** Tries again now, e.g. when the user clicks "Retry". */
@@ -52,21 +59,21 @@ export class BoardSync {
   }
 
   private flush(): void {
-    if (this.inFlight || this.queue.length === 0) {
+    if (this.inFlightBatch !== null || this.queue.length === 0) {
       return;
     }
 
     const batch = this.queue;
     this.queue = [];
-    this.inFlight = true;
+    this.inFlightBatch = batch;
     this.status.set('saving');
 
     this.api
-      .applyOps(this.boardId, batch)
+      .applyOps(this.boardId, batch, this.connectionId())
       .pipe(retry({ count: 3, delay: (error, attempt) => (isClientError(error) ? throwError(() => error) : timer(500 * 2 ** attempt)) }))
       .subscribe({
         next: () => {
-          this.inFlight = false;
+          this.inFlightBatch = null;
           if (this.queue.length > 0) {
             this.flush();
           } else {
@@ -74,7 +81,7 @@ export class BoardSync {
           }
         },
         error: (error: unknown) => {
-          this.inFlight = false;
+          this.inFlightBatch = null;
           if (isClientError(error)) {
             this.status.set('rejected');
             this.flush();

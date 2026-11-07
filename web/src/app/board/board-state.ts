@@ -56,6 +56,28 @@ export class BoardState {
     this.gesture = null;
   }
 
+  /**
+   * Applies changes someone else made. They are not added to this user's undo history: undo only
+   * reverts your own changes, as in most collaborative editors.
+   */
+  applyRemote(ops: readonly Op[]): void {
+    this._shapes.set(applyOps(this._shapes(), ops));
+    this.dropMissingFromSelection();
+    const editing = this.editingId();
+    if (editing && !this._shapes().has(editing)) {
+      this.editingId.set(null);
+    }
+  }
+
+  /**
+   * Replaces the shapes with the server's copy (after reconnecting) and re-applies this user's changes
+   * that haven't been saved yet, so they don't flicker away. Undo history is kept.
+   */
+  resync(serverShapes: readonly Shape[], unsaved: readonly Op[]): void {
+    this._shapes.set(applyOps(new Map(serverShapes.map((s) => [s.id, s])), unsaved));
+    this.dropMissingFromSelection();
+  }
+
   /** z for a new shape, so it lands on top. */
   nextZ(): number {
     let max = 0;

@@ -83,4 +83,27 @@ describe('BoardState', () => {
 
     expect(state.ordered().map((s) => s.id)).toEqual(['b', 'a']);
   });
+
+  it('applies remote changes without adding them to undo', () => {
+    state.apply([{ type: 'add', shape: rect('a') }]);
+    state.select(['a']);
+    state.editingId.set('a');
+
+    state.applyRemote([{ type: 'add', shape: rect('b') }, { type: 'delete', id: 'a' }]);
+
+    expect([...state.shapes().keys()]).toEqual(['b']);
+    expect(state.selection().size).toBe(0);
+    expect(state.editingId()).toBeNull();
+    state.undo(); // undoes only my own add of 'a' (already gone), leaving b
+    expect(state.shapes().has('b')).toBeTrue();
+  });
+
+  it('resyncs to the server copy and keeps unsaved local edits on top', () => {
+    state.apply([{ type: 'add', shape: rect('mine') }]);
+
+    state.resync([rect('theirs')], [{ type: 'add', shape: rect('mine') }]);
+
+    expect([...state.shapes().keys()].sort()).toEqual(['mine', 'theirs']);
+    expect(state.canUndo()).toBeTrue();
+  });
 });

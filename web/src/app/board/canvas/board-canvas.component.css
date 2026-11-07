@@ -69,3 +69,14 @@
   stroke-dasharray: 6 4;
   pointer-events: none;
 }
+
+.remote-cursor {
+  pointer-events: none;
+  transition: transform 80ms linear;
+}
+
+.cursor-name {
+  fill: #fff;
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+}

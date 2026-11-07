@@ -25,6 +25,13 @@
         </h1>
       }
 
+      <div class="people" aria-label="People on this board">
+        @for (person of realtime.others(); track person.connectionId) {
+          <span class="avatar" [style.background]="person.color" [title]="person.name">{{ initials(person.name) }}</span>
+        }
+        <span class="live" [attr.data-status]="realtime.status()" [title]="'Connection: ' + realtime.status()"></span>
+      </div>
+
       <span class="save-status" [attr.data-status]="sync.status()" role="status">
         @switch (sync.status()) {
           @case ('saving') { Saving… }
@@ -39,7 +46,7 @@
     </header>
     <section class="canvas-area">
       @if (loaded()) {
-        <app-board-canvas />
+        <app-board-canvas [remoteCursors]="realtime.cursors()" (cursorMoved)="onCursorMoved($event)" />
         <app-toolbar class="floating-toolbar" />
       }
     </section>
